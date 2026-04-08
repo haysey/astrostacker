@@ -24,11 +24,14 @@ def read(path: str) -> np.ndarray:
         if data is None:
             raise ValueError(f"No image data found in {path}")
 
-        data = data.astype(np.float32)
+        # FITS stores data as big-endian. Convert to native byte order
+        # float32 so downstream libraries (sep, scikit-image) work correctly.
+        data = np.ascontiguousarray(data, dtype=np.float32)
 
         # FITS color images: (C, H, W) -> (H, W, C)
         if data.ndim == 3 and data.shape[0] in (3, 4):
             data = np.transpose(data, (1, 2, 0))
+            data = np.ascontiguousarray(data)
 
         return data
 

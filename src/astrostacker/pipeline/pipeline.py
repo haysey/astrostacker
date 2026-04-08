@@ -122,6 +122,7 @@ class Pipeline:
             calibrated,
             reference_index=self.config.reference_frame,
             progress_callback=align_progress,
+            status_callback=self._report,
         )
         self._check_cancel()
 
