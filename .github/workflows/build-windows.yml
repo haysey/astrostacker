@@ -1,0 +1,63 @@
+name: Build Windows App
+
+on:
+  workflow_dispatch:  # Manual trigger from GitHub website
+  push:
+    branches: [main]
+
+jobs:
+  build-windows-x64:
+    name: Windows x64 Build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller astrostacker.spec --clean
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hayseys-Astrostacker-Windows-x64
+          path: dist/Hayseys Astrostacker/
+          retention-days: 90
+
+  build-macos:
+    name: macOS Build
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller astrostacker.spec --clean
+
+      - name: Upload macOS build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hayseys-Astrostacker-macOS
+          path: dist/Hayseys Astrostacker.app/
+          retention-days: 90

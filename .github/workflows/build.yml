@@ -1,0 +1,118 @@
+name: Build AstroStacker
+
+on:
+  push:
+    tags:
+      - 'v*'  # Build on version tags like v0.1.0
+  workflow_dispatch:  # Also allow manual trigger from GitHub UI
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            artifact_name: AstroStacker-macOS
+            build_output: dist/AstroStacker.app
+          - os: ubuntu-latest
+            artifact_name: AstroStacker-Linux
+            build_output: dist/AstroStacker
+          - os: windows-latest
+            artifact_name: AstroStacker-Windows
+            build_output: dist/AstroStacker
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      # Linux: install system dependencies for Qt
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-glx \
+            libegl1 \
+            libxkbcommon0 \
+            libdbus-1-3 \
+            libxcb-cursor0
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller astrostacker.spec --clean
+
+      # macOS: zip the .app bundle
+      - name: Package macOS app
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          zip -r ../AstroStacker-macOS.zip AstroStacker.app
+
+      # Linux: tar the output directory
+      - name: Package Linux app
+        if: runner.os == 'Linux'
+        run: |
+          cd dist
+          tar -czf ../AstroStacker-Linux.tar.gz AstroStacker/
+
+      # Windows: zip the output directory
+      - name: Package Windows app
+        if: runner.os == 'Windows'
+        run: |
+          Compress-Archive -Path dist/AstroStacker -DestinationPath AstroStacker-Windows.zip
+
+      - name: Upload macOS artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AstroStacker-macOS
+          path: AstroStacker-macOS.zip
+
+      - name: Upload Linux artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AstroStacker-Linux
+          path: AstroStacker-Linux.tar.gz
+
+      - name: Upload Windows artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AstroStacker-Windows
+          path: AstroStacker-Windows.zip
+
+  # Create a GitHub Release with all 3 platform builds
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            AstroStacker-macOS/AstroStacker-macOS.zip
+            AstroStacker-Linux/AstroStacker-Linux.tar.gz
+            AstroStacker-Windows/AstroStacker-Windows.zip
+          generate_release_notes: true
