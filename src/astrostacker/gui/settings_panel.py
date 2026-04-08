@@ -16,11 +16,15 @@ from PyQt6.QtWidgets import (
 )
 
 from astrostacker.config import (
+    CAMERA_COLOUR,
+    CAMERA_MONO,
+    DEFAULT_BAYER_PATTERN,
     DEFAULT_SIGMA_HIGH,
     DEFAULT_SIGMA_LOW,
     DEFAULT_STACKING_METHOD,
     STACKING_METHODS,
 )
+from astrostacker.utils.debayer import BAYER_PATTERNS
 
 
 class SettingsPanel(QWidget):
@@ -42,6 +46,28 @@ class SettingsPanel(QWidget):
             "padding-bottom: 4px;"
         )
         layout.addWidget(title)
+
+        # Camera type
+        camera_group = QGroupBox("Camera")
+        camera_layout = QFormLayout(camera_group)
+        camera_layout.setSpacing(10)
+        camera_layout.setContentsMargins(12, 20, 12, 12)
+
+        self.camera_combo = QComboBox()
+        self.camera_combo.addItem("Mono", CAMERA_MONO)
+        self.camera_combo.addItem("Colour (Bayer)", CAMERA_COLOUR)
+        self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
+        camera_layout.addRow("Type", self.camera_combo)
+
+        self.bayer_combo = QComboBox()
+        for pat in BAYER_PATTERNS:
+            self.bayer_combo.addItem(pat, pat)
+        default_idx = BAYER_PATTERNS.index(DEFAULT_BAYER_PATTERN)
+        self.bayer_combo.setCurrentIndex(default_idx)
+        self.bayer_combo.setEnabled(False)
+        camera_layout.addRow("Bayer Pattern", self.bayer_combo)
+
+        layout.addWidget(camera_group)
 
         # Stacking method
         method_group = QGroupBox("Stacking")
@@ -112,6 +138,10 @@ class SettingsPanel(QWidget):
 
         self._on_method_changed()
 
+    def _on_camera_changed(self):
+        is_colour = self.camera_combo.currentData() == CAMERA_COLOUR
+        self.bayer_combo.setEnabled(is_colour)
+
     def _on_method_changed(self):
         is_sigma = self.get_method() == "sigma_clip"
         self.sigma_low_spin.setEnabled(is_sigma)
@@ -141,6 +171,12 @@ class SettingsPanel(QWidget):
 
     def get_reference_frame(self) -> int:
         return self.reference_spin.value()
+
+    def get_camera_type(self) -> str:
+        return self.camera_combo.currentData()
+
+    def get_bayer_pattern(self) -> str:
+        return self.bayer_combo.currentData()
 
     def set_max_reference(self, count: int):
         self.reference_spin.setMaximum(max(0, count - 1))

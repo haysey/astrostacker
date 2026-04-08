@@ -10,8 +10,10 @@ import numpy as np
 from astrostacker.alignment.align import align_frames
 from astrostacker.calibration.calibrate import calibrate_light
 from astrostacker.calibration.master_frames import build_master_dark, build_master_flat
+from astrostacker.config import CAMERA_COLOUR, CAMERA_MONO
 from astrostacker.io.loader import load_image, save_image
 from astrostacker.stacking.stacker import stack_images
+from astrostacker.utils.debayer import debayer
 from astrostacker.utils.parallel import parallel_load_images
 
 
@@ -27,6 +29,9 @@ class PipelineConfig:
     stacking_method: str = "sigma_clip"
     sigma_low: float = 2.5
     sigma_high: float = 2.5
+
+    camera_type: str = "mono"
+    bayer_pattern: str = "RGGB"
 
     output_path: str = "stacked.fits"
     reference_frame: int = 0
@@ -110,6 +115,21 @@ class Pipeline:
             cal = calibrate_light(light, master_dark, master_flat)
             calibrated.append(cal)
             self._report_progress(i + 1, len(lights), "Calibrating")
+
+        # Stage 2b: Debayer colour camera frames
+        if self.config.camera_type == CAMERA_COLOUR:
+            self._report(f"Debayering with {self.config.bayer_pattern} pattern...")
+            debayered = []
+            for i, frame in enumerate(calibrated):
+                self._check_cancel()
+                if frame.ndim == 2:
+                    # Only debayer mono (raw Bayer) frames
+                    debayered.append(debayer(frame, self.config.bayer_pattern))
+                else:
+                    # Already colour — pass through
+                    debayered.append(frame)
+                self._report_progress(i + 1, len(calibrated), "Debayering")
+            calibrated = debayered
 
         # Stage 3: Align calibrated frames
         self._report("Aligning frames...")

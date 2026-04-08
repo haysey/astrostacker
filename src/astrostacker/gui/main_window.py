@@ -475,6 +475,8 @@ class MainWindow(QMainWindow):
             stacking_method=self.settings_panel.get_method(),
             sigma_low=self.settings_panel.get_sigma_low(),
             sigma_high=self.settings_panel.get_sigma_high(),
+            camera_type=self.settings_panel.get_camera_type(),
+            bayer_pattern=self.settings_panel.get_bayer_pattern(),
             output_path=self.settings_panel.get_output_path(),
             reference_frame=self.settings_panel.get_reference_frame(),
         )
