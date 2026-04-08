@@ -1,13 +1,14 @@
 """Star-based frame alignment using astroalign.
 
-Uses multiprocessing to align frames in parallel across CPU cores.
-On Apple Silicon, targets performance cores for optimal throughput.
+Uses thread-parallel alignment across CPU cores. Threading works well
+here because numpy, scipy and astroalign release the GIL during their
+heavy C-level computations, allowing true parallel execution.
 """
 
 from __future__ import annotations
 
 import warnings
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 import astroalign as aa
@@ -116,8 +117,9 @@ def align_frames(
             if progress_callback:
                 progress_callback(completed, total)
     else:
-        # Parallel alignment across CPU cores
-        with ProcessPoolExecutor(max_workers=workers) as pool:
+        # Parallel alignment across CPU cores using threads
+        # (numpy/astroalign release the GIL during C-level computation)
+        with ThreadPoolExecutor(max_workers=workers) as pool:
             for idx, aligned in pool.map(_align_single_frame, work_items):
                 if aligned is not None:
                     results[idx] = aligned
