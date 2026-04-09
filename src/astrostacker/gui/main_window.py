@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 
 from astrostacker.config import APP_NAME, APP_VERSION
 from astrostacker.gui.file_panel import FilePanel
+from astrostacker.gui.news_ticker import NewsTicker
 from astrostacker.gui.platesolve_panel import PlateSolvePanel
 from astrostacker.gui.preview_panel import PreviewPanel
 from astrostacker.gui.progress_panel import ProgressPanel
@@ -442,6 +443,10 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(h_splitter)
 
+        # News ticker at the bottom
+        self.news_ticker = NewsTicker()
+        main_layout.addWidget(self.news_ticker)
+
     def _connect_signals(self):
         self.file_panel.file_selected.connect(self._on_file_selected)
         self.progress_panel.start_btn.clicked.connect(self._on_start_cancel)
@@ -504,6 +509,24 @@ class MainWindow(QMainWindow):
         self.progress_panel.log("Stacking complete!")
         self.progress_panel.set_progress(100, 100, "Done")
         self.preview_panel.show_data(result, info="Stacked Result")
+
+        # Auto-embed WCS astrometry if a plate solve has been done
+        solve_result = self.platesolve_panel.get_last_result()
+        if solve_result is not None:
+            try:
+                output_path = self.settings_panel.get_output_path()
+                if output_path.lower().endswith((".fits", ".fit", ".fts")):
+                    from astropy.io import fits as pyfits
+                    wcs_dict = solve_result.fits_header_dict()
+                    with pyfits.open(output_path, mode="update") as hdul:
+                        for key, val in wcs_dict.items():
+                            hdul[0].header[key] = val
+                        hdul.flush()
+                    self.progress_panel.log(
+                        f"WCS astrometry embedded ({len(wcs_dict)} keywords)"
+                    )
+            except Exception as e:
+                self.progress_panel.log(f"WCS embed warning: {e}")
 
     def _on_error(self, message: str):
         self.progress_panel.log(f"ERROR: {message}")

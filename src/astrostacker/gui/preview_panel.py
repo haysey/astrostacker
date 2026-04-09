@@ -47,6 +47,10 @@ class PreviewPanel(QWidget):
         self.stretch_combo = QComboBox()
         self.stretch_combo.addItems(["Auto STF", "Linear"])
         self.stretch_combo.setFixedWidth(120)
+        self.stretch_combo.setToolTip(
+            "Auto STF: PixInsight-style screen stretch (best for deep sky).\n"
+            "Linear: Simple min-max stretch."
+        )
         self.stretch_combo.currentIndexChanged.connect(self._refresh_display)
         controls.addWidget(self.stretch_combo)
 
@@ -57,6 +61,7 @@ class PreviewPanel(QWidget):
         self.zoom_combo = QComboBox()
         self.zoom_combo.addItems(["Fit", "25%", "50%", "100%", "200%"])
         self.zoom_combo.setFixedWidth(90)
+        self.zoom_combo.setToolTip("Zoom level. Use 100% to inspect details at native resolution.")
         self.zoom_combo.currentIndexChanged.connect(self._refresh_display)
         controls.addWidget(self.zoom_combo)
 
@@ -130,7 +135,10 @@ class PreviewPanel(QWidget):
 
         zoom_text = self.zoom_combo.currentText()
         if zoom_text == "Fit":
-            available = self.scroll_area.size()
+            # Fit mode: label fills the scroll area, image scales down
+            self.scroll_area.setWidgetResizable(True)
+            self.image_label.setMinimumSize(1, 1)
+            available = self.scroll_area.viewport().size()
             scaled = pixmap.scaled(
                 available,
                 Qt.AspectRatioMode.KeepAspectRatio,
@@ -138,14 +146,19 @@ class PreviewPanel(QWidget):
             )
             self.image_label.setPixmap(scaled)
         else:
+            # Zoom mode: label can be larger than scroll area (scrollable)
+            self.scroll_area.setWidgetResizable(False)
             zoom_pct = int(zoom_text.replace("%", "")) / 100.0
-            new_size = pixmap.size() * zoom_pct
+            w = max(1, int(pixmap.width() * zoom_pct))
+            h = max(1, int(pixmap.height() * zoom_pct))
             scaled = pixmap.scaled(
-                new_size.toSize(),
+                w, h,
                 Qt.AspectRatioMode.KeepAspectRatio,
                 Qt.TransformationMode.SmoothTransformation,
             )
             self.image_label.setPixmap(scaled)
+            self.image_label.setMinimumSize(scaled.size())
+            self.image_label.resize(scaled.size())
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

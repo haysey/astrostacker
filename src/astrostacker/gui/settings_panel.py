@@ -56,6 +56,10 @@ class SettingsPanel(QWidget):
         self.camera_combo = QComboBox()
         self.camera_combo.addItem("Mono", CAMERA_MONO)
         self.camera_combo.addItem("Colour (Bayer)", CAMERA_COLOUR)
+        self.camera_combo.setToolTip(
+            "Select Colour (Bayer) if your camera has a colour sensor.\n"
+            "Raw Bayer data will be debayered to RGB before stacking."
+        )
         self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
         camera_layout.addRow("Type", self.camera_combo)
 
@@ -65,6 +69,11 @@ class SettingsPanel(QWidget):
         default_idx = BAYER_PATTERNS.index(DEFAULT_BAYER_PATTERN)
         self.bayer_combo.setCurrentIndex(default_idx)
         self.bayer_combo.setEnabled(False)
+        self.bayer_combo.setToolTip(
+            "The Bayer pattern of your camera sensor.\n"
+            "Most colour astro cameras use RGGB.\n"
+            "Check your camera specs if unsure."
+        )
         camera_layout.addRow("Bayer Pattern", self.bayer_combo)
 
         layout.addWidget(camera_group)
@@ -87,6 +96,10 @@ class SettingsPanel(QWidget):
             self.method_combo.addItem(method_labels.get(method, method), method)
         default_idx = list(STACKING_METHODS).index(DEFAULT_STACKING_METHOD)
         self.method_combo.setCurrentIndex(default_idx)
+        self.method_combo.setToolTip(
+            "Sigma Clipping is recommended (rejects satellites, planes, noise).\n"
+            "Median is good with fewer frames. Mean maximises signal."
+        )
         self.method_combo.currentIndexChanged.connect(self._on_method_changed)
         method_layout.addRow("Method", self.method_combo)
 
@@ -95,6 +108,10 @@ class SettingsPanel(QWidget):
         self.sigma_low_spin.setSingleStep(0.1)
         self.sigma_low_spin.setValue(DEFAULT_SIGMA_LOW)
         self.sigma_low_spin.setDecimals(1)
+        self.sigma_low_spin.setToolTip(
+            "Reject pixels this many sigma BELOW the median.\n"
+            "Lower = more aggressive rejection. Default 2.5 works well."
+        )
         method_layout.addRow("Sigma Low", self.sigma_low_spin)
 
         self.sigma_high_spin = QDoubleSpinBox()
@@ -102,6 +119,10 @@ class SettingsPanel(QWidget):
         self.sigma_high_spin.setSingleStep(0.1)
         self.sigma_high_spin.setValue(DEFAULT_SIGMA_HIGH)
         self.sigma_high_spin.setDecimals(1)
+        self.sigma_high_spin.setToolTip(
+            "Reject pixels this many sigma ABOVE the median.\n"
+            "Removes satellite trails, hot pixels. Default 2.5 works well."
+        )
         method_layout.addRow("Sigma High", self.sigma_high_spin)
 
         layout.addWidget(method_group)

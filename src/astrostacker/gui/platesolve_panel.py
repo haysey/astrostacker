@@ -38,6 +38,7 @@ class PlateSolvePanel(QWidget):
         self._thread: QThread | None = None
         self._current_path: str | None = None
         self._result_window: SolveResultWindow | None = None
+        self._last_result: SolveResult | None = None
         self._setup_ui()
         self._load_api_key()
 
@@ -154,6 +155,15 @@ class PlateSolvePanel(QWidget):
         self.results_text.setMinimumHeight(140)
         results_layout.addWidget(self.results_text)
 
+        self.write_wcs_btn = QPushButton("Write WCS to FITS...")
+        self.write_wcs_btn.setToolTip(
+            "Embed astrometry WCS coordinates into any FITS file.\n"
+            "Makes the image plate-solved in PixInsight, Siril, etc."
+        )
+        self.write_wcs_btn.setEnabled(False)
+        self.write_wcs_btn.clicked.connect(self._write_wcs_to_fits)
+        results_layout.addWidget(self.write_wcs_btn)
+
         layout.addWidget(results_group)
         layout.addStretch()
 
@@ -239,6 +249,8 @@ class PlateSolvePanel(QWidget):
         self.results_text.append(msg)
 
     def _on_finished(self, result: SolveResult):
+        self._last_result = result
+        self.write_wcs_btn.setEnabled(True)
         self.results_text.clear()
         self.results_text.append(result.summary())
 
@@ -262,3 +274,41 @@ class PlateSolvePanel(QWidget):
         self.solve_btn.style().polish(self.solve_btn)
         self._worker = None
         self._thread = None
+
+    def _write_wcs_to_fits(self):
+        """Write WCS astrometry keywords into a user-chosen FITS file."""
+        if self._last_result is None:
+            return
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select FITS file to embed WCS into",
+            "",
+            "FITS Files (*.fits *.fit *.fts)",
+        )
+        if not path:
+            return
+
+        try:
+            from astropy.io import fits as pyfits
+
+            wcs_dict = self._last_result.fits_header_dict()
+            with pyfits.open(path, mode="update") as hdul:
+                for key, val in wcs_dict.items():
+                    hdul[0].header[key] = val
+                hdul.flush()
+
+            QMessageBox.information(
+                self,
+                "WCS Written",
+                f"Astrometry WCS data ({len(wcs_dict)} keywords) "
+                f"written to:\n{path}\n\n"
+                "This file is now plate-solved and will be recognised "
+                "by PixInsight, Siril, and other astro tools.",
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Write Error", str(e))
+
+    def get_last_result(self) -> SolveResult | None:
+        """Return the last plate solve result, if any."""
+        return self._last_result

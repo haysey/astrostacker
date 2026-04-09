@@ -59,6 +59,7 @@ class SolveResult:
     annotations: list[Annotation]  # Object annotations with pixel positions
     job_id: int
     calibration_id: int
+    wcs_header: dict | None = None  # WCS keywords for FITS embedding
 
     def summary(self) -> str:
         """Human-readable summary of the solve result."""
@@ -72,7 +73,44 @@ class SolveResult:
         ]
         if self.objects_in_field:
             lines.append(f"Objects:     {', '.join(self.objects_in_field[:10])}")
+        if self.wcs_header:
+            lines.append(f"WCS:         Available ({len(self.wcs_header)} keywords)")
         return "\n".join(lines)
+
+    def fits_header_dict(self) -> dict:
+        """Return a dict of all astrometry keywords for embedding in FITS.
+
+        Suitable for passing to fits_io.write(header_extra=...).
+        Includes WCS keywords (for PixInsight, Siril, etc.) plus
+        human-readable OBJCTRA/OBJCTDEC fields.
+        """
+        hdr = {}
+
+        # Human-readable coordinates (PixInsight reads these)
+        hdr["OBJCTRA"] = self.ra_hms
+        hdr["OBJCTDEC"] = self.dec_dms
+        hdr["RA"] = self.ra
+        hdr["DEC"] = self.dec
+        hdr["CRVAL1"] = self.ra
+        hdr["CRVAL2"] = self.dec
+        hdr["CDELT1"] = -(self.pixel_scale / 3600.0)  # negative = standard
+        hdr["CDELT2"] = self.pixel_scale / 3600.0
+        hdr["CTYPE1"] = "RA---TAN"
+        hdr["CTYPE2"] = "DEC--TAN"
+        hdr["PLTSOLVD"] = True
+        hdr["FLDWIDTH"] = self.field_w
+        hdr["FLDHGHT"] = self.field_h
+        hdr["PIXSCALE"] = self.pixel_scale
+        hdr["PA"] = self.orientation
+
+        # Full WCS header from astrometry.net (CD matrix, etc.)
+        if self.wcs_header:
+            for key, val in self.wcs_header.items():
+                if key not in ("SIMPLE", "BITPIX", "NAXIS", "NAXIS1",
+                               "NAXIS2", "EXTEND", "HISTORY", "COMMENT", ""):
+                    hdr[key] = val
+
+        return hdr
 
 
 def _ra_to_hms(ra_deg: float) -> str:
@@ -291,8 +329,39 @@ class AstrometryNetSolver:
 
         raise TimeoutError(f"Job did not complete after {timeout}s")
 
+    def _get_wcs_header(self, job_id: int) -> dict | None:
+        """Retrieve the full WCS FITS header from a solved job.
+
+        Returns a dict of WCS keywords (CRPIX, CRVAL, CD matrix, etc.)
+        that can be embedded directly into a FITS file for use in
+        PixInsight, Siril, and other astro tools.
+        """
+        try:
+            self._report("Retrieving WCS header...")
+            resp = requests.get(
+                f"{API_BASE}/jobs/{job_id}/wcs/", timeout=30
+            )
+            resp.raise_for_status()
+
+            # Response is a FITS file — parse its header
+            hdu_list = fits.open(io.BytesIO(resp.content))
+            header = hdu_list[0].header
+            hdu_list.close()
+
+            wcs = {}
+            for key in header.keys():
+                if key and key.strip():
+                    val = header[key]
+                    # Only keep scalar values (skip HISTORY/COMMENT)
+                    if isinstance(val, (int, float, str, bool)):
+                        wcs[key] = val
+            return wcs
+        except Exception as e:
+            self._report(f"WCS retrieval failed (non-critical): {e}")
+            return None
+
     def _get_calibration(self, job_id: int) -> SolveResult:
-        """Retrieve calibration data, object info, and annotations."""
+        """Retrieve calibration data, object info, annotations, and WCS."""
         self._report("Retrieving calibration data...")
 
         resp = requests.get(f"{API_BASE}/jobs/{job_id}/calibration/", timeout=30)
@@ -331,6 +400,9 @@ class AstrometryNetSolver:
         except Exception:
             pass  # Annotations are non-critical
 
+        # Get WCS FITS header for embedding in output files
+        wcs_header = self._get_wcs_header(job_id)
+
         ra = cal["ra"]
         dec = cal["dec"]
 
@@ -348,6 +420,7 @@ class AstrometryNetSolver:
             annotations=annotations,
             job_id=job_id,
             calibration_id=info.get("calibration", 0),
+            wcs_header=wcs_header,
         )
 
     def solve(
