@@ -7,14 +7,16 @@ from typing import Callable
 
 import numpy as np
 
+from concurrent.futures import ThreadPoolExecutor
+
 from astrostacker.alignment.align import align_frames
-from astrostacker.calibration.calibrate import calibrate_light
+from astrostacker.calibration.calibrate import calibrate_light, prepare_flat_divisor
 from astrostacker.calibration.master_frames import build_master_dark, build_master_flat
 from astrostacker.config import CAMERA_COLOUR, CAMERA_MONO
 from astrostacker.io.loader import load_image, save_image
 from astrostacker.stacking.stacker import stack_images
 from astrostacker.utils.debayer import debayer
-from astrostacker.utils.parallel import parallel_load_images
+from astrostacker.utils.parallel import optimal_workers, parallel_load_images
 
 
 @dataclass
@@ -103,33 +105,52 @@ class Pipeline:
             )
             self._check_cancel()
 
-        # Stage 2: Load and calibrate light frames (parallel I/O)
+        # Stage 2: Load and calibrate light frames
+        #   - Parallel I/O for loading
+        #   - Pre-computed flat divisor (computed once, reused per frame)
+        #   - Parallel calibration across performance cores
         self._report("Loading light frames...")
         lights = parallel_load_images(self.config.light_paths, load_image)
         self._check_cancel()
 
-        self._report("Calibrating light frames...")
-        calibrated = []
-        for i, light in enumerate(lights):
-            self._check_cancel()
-            cal = calibrate_light(light, master_dark, master_flat)
-            calibrated.append(cal)
-            self._report_progress(i + 1, len(lights), "Calibrating")
+        # Pre-compute the safe flat divisor once (avoids repeat work per frame)
+        flat_div = prepare_flat_divisor(master_flat) if master_flat is not None else None
 
-        # Stage 2b: Debayer colour camera frames
+        workers = optimal_workers(io_bound=False)
+        n_frames = len(lights)
+        self._report(f"Calibrating {n_frames} frames across {workers} cores...")
+
+        def _calibrate_one(light):
+            return calibrate_light(light, master_dark, flat_divisor=flat_div)
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            calibrated = list(pool.map(_calibrate_one, lights))
+        self._report_progress(n_frames, n_frames, "Calibrating")
+        self._check_cancel()
+
+        # Free raw lights to reduce peak memory
+        del lights
+
+        # Stage 2b: Debayer colour camera frames (parallel across cores)
         if self.config.camera_type == CAMERA_COLOUR:
-            self._report(f"Debayering with {self.config.bayer_pattern} pattern...")
-            debayered = []
-            for i, frame in enumerate(calibrated):
-                self._check_cancel()
+            self._report(
+                f"Debayering {n_frames} frames ({self.config.bayer_pattern}) "
+                f"across {workers} cores..."
+            )
+            pattern = self.config.bayer_pattern
+
+            def _debayer_one(frame):
                 if frame.ndim == 2:
-                    # Only debayer mono (raw Bayer) frames
-                    debayered.append(debayer(frame, self.config.bayer_pattern))
-                else:
-                    # Already colour — pass through
-                    debayered.append(frame)
-                self._report_progress(i + 1, len(calibrated), "Debayering")
-            calibrated = debayered
+                    return debayer(frame, pattern)
+                return frame
+
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                calibrated = list(pool.map(_debayer_one, calibrated))
+            self._report_progress(n_frames, n_frames, "Debayering")
+            self._check_cancel()
+            self._report(f"Debayer complete — frames are now RGB {calibrated[0].shape}")
+        else:
+            self._report("Camera set to Mono — skipping debayer")
 
         # Stage 3: Align calibrated frames
         self._report("Aligning frames...")
@@ -163,7 +184,8 @@ class Pipeline:
         self._check_cancel()
 
         # Stage 5: Save
-        self._report(f"Saving result to {self.config.output_path}...")
+        colour_info = "RGB colour" if result.ndim == 3 else "mono"
+        self._report(f"Saving {colour_info} result {result.shape} to {self.config.output_path}...")
         save_image(self.config.output_path, result)
 
         self._report("Done!")

@@ -53,6 +53,10 @@ def write(path: str, data: np.ndarray, header_extra: dict | None = None) -> None
     hdu = fits.PrimaryHDU(write_data.astype(np.float32))
     hdu.header["HISTORY"] = "Stacked with Haysey's Astrostacker"
 
+    # Mark colour images so PixInsight and other readers detect RGB
+    if write_data.ndim == 3 and write_data.shape[0] in (3, 4):
+        hdu.header["COLORTYP"] = "RGB"
+
     if header_extra:
         for key, value in header_extra.items():
             hdu.header[key] = value
