@@ -149,8 +149,11 @@ class PlateSolvePanel(QWidget):
         self.results_text.setReadOnly(True)
         self.results_text.setPlaceholderText(
             "Solve results will appear here...\n\n"
-            "Tip: Get a free API key at nova.astrometry.net\n"
-            "for faster solving priority."
+            "Tips for faster solving:\n"
+            "1. Get a free API key at nova.astrometry.net\n"
+            "2. Add Scale Hints above (your camera's arcsec/pixel)\n"
+            "   This dramatically speeds up solving!\n"
+            "3. Be patient — solving can take 2-10 minutes"
         )
         self.results_text.setMinimumHeight(140)
         results_layout.addWidget(self.results_text)

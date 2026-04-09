@@ -24,7 +24,7 @@ from scipy.ndimage import zoom
 from astrostacker.io.loader import load_image
 
 API_BASE = "https://nova.astrometry.net/api"
-DEFAULT_TIMEOUT = 300  # seconds
+DEFAULT_TIMEOUT = 600  # seconds (10 minutes — astrometry.net can be slow)
 
 # Stretch factor applied to the image before uploading for solving.
 # 1.2 = 20% larger, which improves readability of the annotated result.
@@ -181,6 +181,34 @@ class AstrometryNetSolver:
         if self.cancelled:
             raise InterruptedError("Plate solve cancelled")
 
+    def _request_with_retry(self, method: str, url: str, max_retries: int = 3, **kwargs):
+        """Make an HTTP request with automatic retry on transient failures."""
+        kwargs.setdefault("timeout", 60)
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                resp = requests.request(method, url, **kwargs)
+                resp.raise_for_status()
+                return resp
+            except (requests.ConnectionError, requests.Timeout) as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait = 5 * (attempt + 1)
+                    self._report(f"Connection issue, retrying in {wait}s...")
+                    time.sleep(wait)
+                    self._check_cancel()
+            except requests.HTTPError as e:
+                if e.response is not None and e.response.status_code >= 500:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        wait = 5 * (attempt + 1)
+                        self._report(f"Server error, retrying in {wait}s...")
+                        time.sleep(wait)
+                        self._check_cancel()
+                else:
+                    raise
+        raise last_error
+
     def login(self) -> str:
         """Login to Astrometry.net and get a session key.
 
@@ -188,12 +216,12 @@ class AstrometryNetSolver:
         """
         self._report("Connecting to Astrometry.net...")
         payload = {"apikey": self.api_key} if self.api_key else {}
-        resp = requests.post(
+        resp = self._request_with_retry(
+            "POST",
             f"{API_BASE}/login",
             data={"request-json": json.dumps(payload)},
             timeout=30,
         )
-        resp.raise_for_status()
         result = resp.json()
 
         if result.get("status") != "success":
@@ -259,14 +287,17 @@ class AstrometryNetSolver:
             upload_args["scale_type"] = "ul"
 
         fits_data = _image_to_fits_bytes(image_path)
+        size_mb = len(fits_data) / (1024 * 1024)
+        self._report(f"Uploading {Path(image_path).name} ({size_mb:.1f} MB)...")
 
-        resp = requests.post(
+        resp = self._request_with_retry(
+            "POST",
             f"{API_BASE}/upload",
             data={"request-json": json.dumps(upload_args)},
             files={"file": (Path(image_path).name, fits_data, "application/fits")},
-            timeout=120,
+            timeout=180,
+            max_retries=2,
         )
-        resp.raise_for_status()
         result = resp.json()
 
         if result.get("status") != "success":
@@ -284,24 +315,39 @@ class AstrometryNetSolver:
         Returns:
             Job ID.
         """
-        self._report("Waiting for job to start...")
+        self._report("Waiting for job to start (this can take a minute)...")
         start = time.time()
+        poll_count = 0
 
         while time.time() - start < timeout:
             self._check_cancel()
-            resp = requests.get(f"{API_BASE}/submissions/{subid}", timeout=30)
-            resp.raise_for_status()
-            result = resp.json()
+            try:
+                resp = self._request_with_retry(
+                    "GET", f"{API_BASE}/submissions/{subid}", timeout=30,
+                )
+                result = resp.json()
 
-            jobs = result.get("jobs", [])
-            if jobs and jobs[0] is not None:
-                job_id = jobs[0]
-                self._report(f"Job started: {job_id}")
-                return job_id
+                jobs = result.get("jobs", [])
+                if jobs and jobs[0] is not None:
+                    job_id = jobs[0]
+                    elapsed = int(time.time() - start)
+                    self._report(f"Job started: {job_id} (waited {elapsed}s)")
+                    return job_id
+            except Exception:
+                pass  # retry on next poll
+
+            poll_count += 1
+            if poll_count % 4 == 0:
+                elapsed = int(time.time() - start)
+                self._report(f"Still waiting for job to start... ({elapsed}s)")
 
             time.sleep(5)
 
-        raise TimeoutError(f"No job assigned after {timeout}s")
+        raise TimeoutError(
+            f"No job assigned after {timeout}s. "
+            "Astrometry.net may be busy — try again later, "
+            "or add Scale Hints to speed up solving."
+        )
 
     def _poll_job(self, job_id: int, timeout: int = DEFAULT_TIMEOUT) -> str:
         """Poll a job until it succeeds or fails.
@@ -309,25 +355,45 @@ class AstrometryNetSolver:
         Returns:
             'success' or 'failure'.
         """
-        self._report("Solving...")
+        self._report("Solving (please be patient — can take several minutes)...")
         start = time.time()
+        poll_count = 0
 
         while time.time() - start < timeout:
             self._check_cancel()
-            resp = requests.get(f"{API_BASE}/jobs/{job_id}", timeout=30)
-            resp.raise_for_status()
-            result = resp.json()
+            try:
+                resp = self._request_with_retry(
+                    "GET", f"{API_BASE}/jobs/{job_id}", timeout=30,
+                )
+                result = resp.json()
 
-            status = result.get("status")
-            if status == "success":
-                self._report("Solve succeeded!")
-                return "success"
-            elif status == "failure":
-                raise RuntimeError("Plate solve failed - no solution found")
+                status = result.get("status")
+                if status == "success":
+                    elapsed = int(time.time() - start)
+                    self._report(f"Solve succeeded! (took {elapsed}s)")
+                    return "success"
+                elif status == "failure":
+                    raise RuntimeError(
+                        "Plate solve failed — no solution found. "
+                        "Try adding Scale Hints (your camera's arcsec/pixel) "
+                        "to help the solver."
+                    )
+            except RuntimeError:
+                raise
+            except Exception:
+                pass  # retry on next poll
+
+            poll_count += 1
+            if poll_count % 4 == 0:
+                elapsed = int(time.time() - start)
+                self._report(f"Still solving... ({elapsed}s elapsed)")
 
             time.sleep(5)
 
-        raise TimeoutError(f"Job did not complete after {timeout}s")
+        raise TimeoutError(
+            f"Solve did not complete after {timeout}s. "
+            "Tips: add Scale Hints (arcsec/pixel), or try a smaller image."
+        )
 
     def _get_wcs_header(self, job_id: int) -> dict | None:
         """Retrieve the full WCS FITS header from a solved job.
