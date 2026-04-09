@@ -2,15 +2,20 @@
 
 Fetches headlines from astronomy/space RSS feeds and scrolls them
 across the bottom of the window while the user waits for processing.
+
+Each headline is clickable — opens the original article in the browser.
 """
 
 from __future__ import annotations
 
+import webbrowser
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from typing import List
 
 from PyQt6.QtCore import QTimer, Qt, QThread, pyqtSignal, QObject
-from PyQt6.QtWidgets import QLabel, QHBoxLayout, QWidget
+from PyQt6.QtGui import QCursor
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
 
 # RSS feeds for astronomy and space news
@@ -23,54 +28,76 @@ RSS_FEEDS = [
 TICKER_SEPARATOR = "        \u2022        "  # bullet separator
 
 
+@dataclass
+class HeadlineItem:
+    """A news headline with its source URL."""
+    title: str
+    url: str
+
+
 class _FeedFetcher(QObject):
     """Background worker to fetch RSS headlines without blocking the GUI."""
 
-    finished = pyqtSignal(list)  # list[str]
+    finished = pyqtSignal(list)  # list[HeadlineItem]
 
     def run(self):
-        headlines: List[str] = []
-        for url in RSS_FEEDS:
+        items: List[HeadlineItem] = []
+        for feed_url in RSS_FEEDS:
             try:
                 import requests
-                resp = requests.get(url, timeout=10, headers={
+                resp = requests.get(feed_url, timeout=10, headers={
                     "User-Agent": "HayseysAstrostacker/1.0"
                 })
                 resp.raise_for_status()
                 root = ET.fromstring(resp.content)
 
-                # Standard RSS 2.0: channel/item/title
+                # Standard RSS 2.0: channel/item
                 for item in root.findall(".//item"):
                     title = item.findtext("title")
-                    if title:
-                        headlines.append(title.strip())
+                    link = item.findtext("link")
+                    if title and link:
+                        items.append(HeadlineItem(
+                            title=title.strip(), url=link.strip()
+                        ))
 
-                # Atom feeds: entry/title
+                # Atom feeds: entry
                 ns = {"atom": "http://www.w3.org/2005/Atom"}
                 for entry in root.findall(".//atom:entry", ns):
                     title = entry.findtext("atom:title", namespaces=ns)
-                    if title:
-                        headlines.append(title.strip())
+                    link_el = entry.find("atom:link[@rel='alternate']", ns)
+                    if link_el is None:
+                        link_el = entry.find("atom:link", ns)
+                    link = link_el.get("href") if link_el is not None else None
+                    if title and link:
+                        items.append(HeadlineItem(
+                            title=title.strip(), url=link.strip()
+                        ))
             except Exception:
                 continue
 
-        # Deduplicate while preserving order
+        # Deduplicate by title while preserving order
         seen = set()
         unique = []
-        for h in headlines:
-            if h not in seen:
-                seen.add(h)
-                unique.append(h)
+        for item in items:
+            if item.title not in seen:
+                seen.add(item.title)
+                unique.append(item)
 
         self.finished.emit(unique[:30])  # cap at 30 headlines
 
 
 class NewsTicker(QWidget):
-    """Scrolling astronomy news ticker bar."""
+    """Scrolling astronomy news ticker bar.
+
+    Click anywhere on the ticker to open the currently visible
+    headline's article in your default web browser.
+    """
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(28)
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.setToolTip("Click to open this story in your browser")
         self.setStyleSheet(
             "background-color: rgba(0, 0, 0, 0.4);"
             "border-top: 1px solid rgba(255, 255, 255, 0.06);"
@@ -94,14 +121,18 @@ class NewsTicker(QWidget):
         )
         layout.addWidget(self._label)
 
+        self._headlines: List[HeadlineItem] = []
         self._full_text = ""
         self._scroll_pos = 0
         self._display_width = 120  # characters visible at once
 
+        # Track which headline index is currently centred on screen
+        self._headline_offsets: List[int] = []  # char offset where each headline starts
+
         # Scroll timer
         self._scroll_timer = QTimer(self)
         self._scroll_timer.timeout.connect(self._tick)
-        self._scroll_timer.setInterval(60)  # ~16fps scrolling
+        self._scroll_timer.setInterval(60)  # smooth scrolling
 
         # Fetch headlines in background thread
         self._fetch_thread = QThread()
@@ -117,29 +148,65 @@ class NewsTicker(QWidget):
         self._refresh_timer.timeout.connect(self._refresh_feeds)
         self._refresh_timer.start(15 * 60 * 1000)
 
-    def _on_headlines(self, headlines: list):
-        if not headlines:
+    def _on_headlines(self, items: list):
+        if not items:
             self._label.setText(
-                "  No news available — check your internet connection"
+                "  No news available \u2014 check your internet connection"
             )
             return
 
-        self._full_text = TICKER_SEPARATOR.join(headlines) + TICKER_SEPARATOR
+        self._headlines = items
+
+        # Build the full scrolling text and record where each headline starts
+        self._headline_offsets = []
+        parts = []
+        offset = 0
+        for item in items:
+            self._headline_offsets.append(offset)
+            part = item.title + TICKER_SEPARATOR
+            parts.append(part)
+            offset += len(part)
+
+        self._full_text = "".join(parts)
         self._scroll_pos = 0
         self._scroll_timer.start()
+
+    def _get_current_headline_index(self) -> int:
+        """Return the index of the headline currently visible at the centre."""
+        if not self._headline_offsets:
+            return 0
+
+        # Position of the centre of the visible window
+        centre = self._scroll_pos + self._display_width // 2
+        centre = centre % len(self._full_text)
+
+        # Find which headline contains this position
+        for i in range(len(self._headline_offsets) - 1, -1, -1):
+            if centre >= self._headline_offsets[i]:
+                return i
+        return 0
 
     def _tick(self):
         if not self._full_text:
             return
 
-        # Create a window into the scrolling text
-        doubled = self._full_text + self._full_text  # seamless loop
+        # Create a window into the scrolling text (seamless loop)
+        doubled = self._full_text + self._full_text
         visible = doubled[self._scroll_pos:self._scroll_pos + self._display_width]
         self._label.setText(visible)
 
         self._scroll_pos += 1
         if self._scroll_pos >= len(self._full_text):
             self._scroll_pos = 0
+
+    def mousePressEvent(self, event):
+        """Open the currently visible headline's URL in the browser."""
+        if self._headlines:
+            idx = self._get_current_headline_index()
+            url = self._headlines[idx].url
+            if url:
+                webbrowser.open(url)
+        super().mousePressEvent(event)
 
     def _refresh_feeds(self):
         """Re-fetch headlines periodically."""

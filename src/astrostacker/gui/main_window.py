@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 from PyQt6.QtCore import QThread, Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QBrush, QFont, QPalette, QPixmap
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QMainWindow,
@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from astrostacker.config import APP_NAME, APP_VERSION
+from astrostacker.gui.background import generate_background_pixmap
 from astrostacker.gui.file_panel import FilePanel
 from astrostacker.gui.news_ticker import NewsTicker
 from astrostacker.gui.platesolve_panel import PlateSolvePanel
@@ -29,7 +30,7 @@ from astrostacker.pipeline.worker import PipelineWorker, create_worker_thread
 MACOS_STYLESHEET = """
     /* ── Window ── */
     QMainWindow {
-        background-color: #1e1e1e;
+        background-color: transparent;
     }
 
     /* ── Base widget ── */
@@ -42,7 +43,7 @@ MACOS_STYLESHEET = """
 
     /* ── Sidebar (file panel) ── */
     QWidget#sidebar {
-        background-color: rgba(30, 30, 30, 0.85);
+        background-color: rgba(20, 22, 30, 0.82);
         border-right: 1px solid rgba(255, 255, 255, 0.08);
     }
 
@@ -205,8 +206,8 @@ MACOS_STYLESHEET = """
 
     /* ── Group boxes ── */
     QGroupBox {
-        background-color: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        background-color: rgba(15, 15, 25, 0.55);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 10px;
         margin-top: 14px;
         padding: 20px 12px 12px 12px;
@@ -240,9 +241,9 @@ MACOS_STYLESHEET = """
 
     /* ── Text edit (log) ── */
     QTextEdit {
-        background-color: rgba(0, 0, 0, 0.25);
+        background-color: rgba(0, 0, 0, 0.35);
         color: rgba(255, 255, 255, 0.7);
-        border: 1px solid rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 8px;
         padding: 8px;
         font-family: "SF Mono", "Menlo", "Monaco", monospace;
@@ -315,7 +316,7 @@ MACOS_STYLESHEET = """
         background-color: transparent;
     }
     QTabBar {
-        background-color: rgba(30, 30, 30, 0.95);
+        background-color: rgba(15, 15, 25, 0.85);
     }
     QTabBar::tab {
         background-color: transparent;
@@ -346,6 +347,29 @@ MACOS_STYLESHEET = """
 """
 
 
+class _StarfieldWidget(QWidget):
+    """Central widget that paints a procedural starfield background."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._bg_pixmap: QPixmap | None = None
+
+    def paintEvent(self, event):
+        from PyQt6.QtGui import QPainter
+        painter = QPainter(self)
+        if self._bg_pixmap is None or self._bg_pixmap.size() != self.size():
+            self._bg_pixmap = generate_background_pixmap(
+                self.width(), self.height()
+            )
+        painter.drawPixmap(0, 0, self._bg_pixmap)
+        painter.end()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._bg_pixmap = None  # regenerate on next paint
+        self.update()
+
+
 class MainWindow(QMainWindow):
     """Main application window."""
 
@@ -364,8 +388,7 @@ class MainWindow(QMainWindow):
         # Use unified toolbar area for macOS look
         self.setUnifiedTitleAndToolBarOnMac(True)
 
-        central = QWidget()
-        central.setStyleSheet("background-color: #1e1e1e;")
+        central = _StarfieldWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -399,7 +422,6 @@ class MainWindow(QMainWindow):
 
         # Right: Preview on top, settings + progress on bottom
         right_widget = QWidget()
-        right_widget.setStyleSheet("background-color: #1e1e1e;")
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
@@ -416,7 +438,7 @@ class MainWindow(QMainWindow):
         bottom_widget.setObjectName("bottomPanel")
         bottom_widget.setStyleSheet(
             "QWidget#bottomPanel {"
-            "  background-color: rgba(28, 28, 30, 0.95);"
+            "  background-color: rgba(15, 15, 25, 0.75);"
             "  border-top: 1px solid rgba(255, 255, 255, 0.06);"
             "}"
         )
