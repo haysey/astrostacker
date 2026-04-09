@@ -95,7 +95,7 @@ class NewsTicker(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(28)
+        self.setFixedHeight(34)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.setToolTip("Click to open this story in your browser")
         self.setStyleSheet(
@@ -109,8 +109,9 @@ class NewsTicker(QWidget):
 
         self._label = QLabel("  Loading astronomy news...")
         self._label.setStyleSheet(
-            "color: rgba(255, 149, 0, 0.7);"
-            "font-size: 11px;"
+            "color: rgba(255, 149, 0, 0.8);"
+            "font-size: 13px;"
+            "font-weight: 700;"
             "font-family: -apple-system, 'SF Pro Text', 'Segoe UI', sans-serif;"
             "background: transparent;"
             "border: none;"
@@ -132,7 +133,7 @@ class NewsTicker(QWidget):
         # Scroll timer
         self._scroll_timer = QTimer(self)
         self._scroll_timer.timeout.connect(self._tick)
-        self._scroll_timer.setInterval(60)  # smooth scrolling
+        self._scroll_timer.setInterval(80)  # smooth scrolling, ~30% slower
 
         # Fetch headlines in background thread
         self._fetch_thread = QThread()
@@ -222,5 +223,5 @@ class NewsTicker(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         # Adjust visible character count based on widget width
-        char_width = 7  # approximate pixel width per character
+        char_width = 8  # approximate pixel width per character (bold 13px)
         self._display_width = max(40, self.width() // char_width)
