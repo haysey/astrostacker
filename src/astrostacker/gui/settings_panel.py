@@ -1,6 +1,7 @@
 """Settings panel with modern macOS-style controls."""
 
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -155,6 +156,20 @@ class SettingsPanel(QWidget):
         output_layout.addWidget(browse_btn)
 
         layout.addWidget(output_group)
+
+        # Auto plate solve
+        self.auto_solve_check = QCheckBox("Auto plate solve after stacking")
+        self.auto_solve_check.setToolTip(
+            "Automatically plate solve the stacked image and embed\n"
+            "WCS astrometry data into the FITS file.\n"
+            "Requires an API key in the Plate Solve tab."
+        )
+        self.auto_solve_check.setStyleSheet(
+            "QCheckBox { color: rgba(255, 255, 255, 0.7); font-size: 12px; padding: 6px 2px; }"
+            "QCheckBox::indicator { width: 16px; height: 16px; }"
+        )
+        layout.addWidget(self.auto_solve_check)
+
         layout.addStretch()
 
         self._on_method_changed()
@@ -192,6 +207,9 @@ class SettingsPanel(QWidget):
 
     def get_reference_frame(self) -> int:
         return self.reference_spin.value()
+
+    def get_auto_solve(self) -> bool:
+        return self.auto_solve_check.isChecked()
 
     def get_camera_type(self) -> str:
         return self.camera_combo.currentData()

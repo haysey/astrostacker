@@ -25,6 +25,8 @@ from astrostacker.gui.progress_panel import ProgressPanel
 from astrostacker.gui.settings_panel import SettingsPanel
 from astrostacker.pipeline.pipeline import PipelineConfig
 from astrostacker.pipeline.worker import PipelineWorker, create_worker_thread
+from astrostacker.platesolve.solver import SolveResult
+from astrostacker.platesolve.worker import SolveWorker, create_solve_thread
 
 # macOS-native dark palette
 MACOS_STYLESHEET = """
@@ -377,6 +379,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._worker: PipelineWorker | None = None
         self._thread: QThread | None = None
+        self._solve_worker: SolveWorker | None = None
+        self._solve_thread: QThread | None = None
         self._setup_ui()
         self._connect_signals()
 
@@ -529,10 +533,18 @@ class MainWindow(QMainWindow):
 
     def _on_finished(self, result: np.ndarray):
         self.progress_panel.log("Stacking complete!")
-        self.progress_panel.set_progress(100, 100, "Done")
+        self.progress_panel.set_progress(100, 100, "Stacking done")
         self.preview_panel.show_data(result, info="Stacked Result")
 
-        # Auto-embed WCS astrometry if a plate solve has been done
+        # Embed WCS from a previous plate solve if available
+        self._embed_existing_wcs()
+
+        # Auto plate solve if the user ticked the checkbox
+        if self.settings_panel.get_auto_solve():
+            self._start_auto_solve()
+
+    def _embed_existing_wcs(self):
+        """Embed WCS from a previous plate solve into the stacked FITS."""
         solve_result = self.platesolve_panel.get_last_result()
         if solve_result is not None:
             try:
@@ -550,11 +562,78 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 self.progress_panel.log(f"WCS embed warning: {e}")
 
+    def _start_auto_solve(self):
+        """Kick off an automatic plate solve of the stacked image."""
+        output_path = self.settings_panel.get_output_path()
+        api_key = self.platesolve_panel.api_key_input.text().strip()
+
+        if not api_key:
+            self.progress_panel.log(
+                "Auto plate solve skipped — no API key set in Plate Solve tab"
+            )
+            return
+
+        self.progress_panel.log("Starting auto plate solve...")
+
+        # Get scale hints from the plate solve panel if set
+        ps = self.platesolve_panel
+        scale_lower = ps.scale_lower_spin.value() if ps.scale_lower_spin.value() > 0 else None
+        scale_upper = ps.scale_upper_spin.value() if ps.scale_upper_spin.value() > 0 else None
+        scale_units = ps.scale_units_combo.currentData()
+
+        self._solve_thread, self._solve_worker = create_solve_thread(
+            image_path=output_path,
+            api_key=api_key,
+            scale_lower=scale_lower,
+            scale_upper=scale_upper,
+            scale_units=scale_units,
+        )
+        self._solve_worker.status_update.connect(self._on_status)
+        self._solve_worker.finished.connect(self._on_auto_solve_finished)
+        self._solve_worker.error.connect(self._on_auto_solve_error)
+        self._solve_thread.finished.connect(self._on_auto_solve_thread_done)
+
+        self._solve_thread.start()
+
+    def _on_auto_solve_finished(self, result: SolveResult):
+        self.progress_panel.log("Auto plate solve succeeded!")
+        self.progress_panel.log(result.summary())
+
+        # Store result in the plate solve panel for reuse
+        self.platesolve_panel._last_result = result
+        self.platesolve_panel.write_wcs_btn.setEnabled(True)
+
+        # Embed WCS into the stacked FITS
+        try:
+            output_path = self.settings_panel.get_output_path()
+            if output_path.lower().endswith((".fits", ".fit", ".fts")):
+                from astropy.io import fits as pyfits
+                wcs_dict = result.fits_header_dict()
+                with pyfits.open(output_path, mode="update") as hdul:
+                    for key, val in wcs_dict.items():
+                        hdul[0].header[key] = val
+                    hdul.flush()
+                self.progress_panel.log(
+                    f"WCS astrometry embedded into {output_path}"
+                )
+        except Exception as e:
+            self.progress_panel.log(f"WCS embed warning: {e}")
+
+    def _on_auto_solve_error(self, message: str):
+        self.progress_panel.log(f"Auto plate solve failed: {message}")
+
+    def _on_auto_solve_thread_done(self):
+        self._solve_worker = None
+        self._solve_thread = None
+        self.progress_panel.set_running(False)
+
     def _on_error(self, message: str):
         self.progress_panel.log(f"ERROR: {message}")
         QMessageBox.critical(self, "Pipeline Error", message)
 
     def _on_thread_done(self):
-        self.progress_panel.set_running(False)
+        # Only reset running state if no auto-solve is pending
+        if self._solve_thread is None or not self._solve_thread.isRunning():
+            self.progress_panel.set_running(False)
         self._worker = None
         self._thread = None
