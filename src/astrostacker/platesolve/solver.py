@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -77,13 +78,17 @@ class SolveResult:
             lines.append(f"WCS:         Available ({len(self.wcs_header)} keywords)")
         return "\n".join(lines)
 
-    def fits_header_dict(self) -> dict:
+    def fits_header_dict(self, image_width: int = 0, image_height: int = 0) -> dict:
         """Return a dict of all astrometry keywords for embedding in FITS.
 
         The WCS from astrometry.net was solved on an image stretched by
         SOLVE_IMAGE_SCALE (1.2x). We must correct CRPIX (reference pixel)
         and CD matrix (degrees-per-pixel) back to the original image size
         so PixInsight, Siril, etc. recognise a valid astrometric solution.
+
+        Args:
+            image_width: Actual image width in pixels (for CRPIX fallback).
+            image_height: Actual image height in pixels (for CRPIX fallback).
         """
         scale = SOLVE_IMAGE_SCALE
         # Pixel scale from astrometry is for the stretched image;
@@ -141,9 +146,28 @@ class SolveResult:
                 hdr.pop("CDELT1", None)
                 hdr.pop("CDELT2", None)
         else:
-            # No WCS header from API — use basic CDELT from pixel scale
-            hdr["CDELT1"] = -(orig_pixel_scale / 3600.0)
-            hdr["CDELT2"] = orig_pixel_scale / 3600.0
+            # No WCS header from API — build full WCS from calibration data.
+            # Compute CD matrix from pixel scale and orientation so
+            # PixInsight/Siril have a complete astrometric solution.
+            s = orig_pixel_scale / 3600.0  # degrees per pixel
+            pa = math.radians(self.orientation)
+
+            flip = -1 if self.parity == "Flipped" else 1
+            hdr["CD1_1"] = -s * math.cos(pa) * flip
+            hdr["CD1_2"] = s * math.sin(pa)
+            hdr["CD2_1"] = -s * math.sin(pa) * flip
+            hdr["CD2_2"] = -s * math.cos(pa)
+
+            # CRPIX = image centre
+            if image_width > 0 and image_height > 0:
+                img_w, img_h = image_width, image_height
+            elif self.field_w > 0 and orig_pixel_scale > 0:
+                img_w = self.field_w * 60.0 / orig_pixel_scale
+                img_h = self.field_h * 60.0 / orig_pixel_scale
+            else:
+                img_w, img_h = 4000, 3000
+            hdr["CRPIX1"] = img_w / 2.0
+            hdr["CRPIX2"] = img_h / 2.0
 
         return hdr
 
@@ -436,8 +460,11 @@ class AstrometryNetSolver:
         """
         try:
             self._report("Retrieving WCS header...")
-            resp = requests.get(
-                f"{API_BASE}/jobs/{job_id}/wcs/", timeout=30
+            resp = self._request_with_retry(
+                "GET",
+                f"{API_BASE}/jobs/{job_id}/wcs/",
+                max_retries=3,
+                timeout=60,
             )
             resp.raise_for_status()
 
@@ -453,7 +480,9 @@ class AstrometryNetSolver:
                     # Only keep scalar values (skip HISTORY/COMMENT)
                     if isinstance(val, (int, float, str, bool)):
                         wcs[key] = val
-            return wcs
+
+            self._report(f"WCS header retrieved ({len(wcs)} keywords)")
+            return wcs if wcs else None
         except Exception as e:
             self._report(f"WCS retrieval failed (non-critical): {e}")
             return None

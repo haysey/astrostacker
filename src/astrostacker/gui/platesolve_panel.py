@@ -295,8 +295,12 @@ class PlateSolvePanel(QWidget):
         try:
             from astropy.io import fits as pyfits
 
-            wcs_dict = self._last_result.fits_header_dict()
             with pyfits.open(path, mode="update") as hdul:
+                img_w = hdul[0].header.get("NAXIS1", 0)
+                img_h = hdul[0].header.get("NAXIS2", 0)
+                wcs_dict = self._last_result.fits_header_dict(
+                    image_width=img_w, image_height=img_h
+                )
                 for key, val in wcs_dict.items():
                     hdul[0].header[key] = val
                 hdul.flush()
