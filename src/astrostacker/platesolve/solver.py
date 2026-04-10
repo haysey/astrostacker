@@ -80,35 +80,70 @@ class SolveResult:
     def fits_header_dict(self) -> dict:
         """Return a dict of all astrometry keywords for embedding in FITS.
 
-        Suitable for passing to fits_io.write(header_extra=...).
-        Includes WCS keywords (for PixInsight, Siril, etc.) plus
-        human-readable OBJCTRA/OBJCTDEC fields.
+        The WCS from astrometry.net was solved on an image stretched by
+        SOLVE_IMAGE_SCALE (1.2x). We must correct CRPIX (reference pixel)
+        and CD matrix (degrees-per-pixel) back to the original image size
+        so PixInsight, Siril, etc. recognise a valid astrometric solution.
         """
+        scale = SOLVE_IMAGE_SCALE
+        # Pixel scale from astrometry is for the stretched image;
+        # the original image's pixels cover more sky
+        orig_pixel_scale = self.pixel_scale * scale
+
         hdr = {}
+
+        # Coordinate system (required by PixInsight SPCC)
+        hdr["CTYPE1"] = "RA---TAN"
+        hdr["CTYPE2"] = "DEC--TAN"
+        hdr["EQUINOX"] = 2000.0
+        hdr["RADESYS"] = "ICRS"
+
+        # Reference sky coordinates (correct as-is)
+        hdr["CRVAL1"] = self.ra
+        hdr["CRVAL2"] = self.dec
 
         # Human-readable coordinates (PixInsight reads these)
         hdr["OBJCTRA"] = self.ra_hms
         hdr["OBJCTDEC"] = self.dec_dms
         hdr["RA"] = self.ra
         hdr["DEC"] = self.dec
-        hdr["CRVAL1"] = self.ra
-        hdr["CRVAL2"] = self.dec
-        hdr["CDELT1"] = -(self.pixel_scale / 3600.0)  # negative = standard
-        hdr["CDELT2"] = self.pixel_scale / 3600.0
-        hdr["CTYPE1"] = "RA---TAN"
-        hdr["CTYPE2"] = "DEC--TAN"
+
+        # Plate solve metadata
         hdr["PLTSOLVD"] = True
         hdr["FLDWIDTH"] = self.field_w
         hdr["FLDHGHT"] = self.field_h
-        hdr["PIXSCALE"] = self.pixel_scale
+        hdr["PIXSCALE"] = orig_pixel_scale
         hdr["PA"] = self.orientation
 
-        # Full WCS header from astrometry.net (CD matrix, etc.)
+        # Full WCS header from astrometry.net — adjust for image scale
         if self.wcs_header:
             for key, val in self.wcs_header.items():
-                if key not in ("SIMPLE", "BITPIX", "NAXIS", "NAXIS1",
-                               "NAXIS2", "EXTEND", "HISTORY", "COMMENT", ""):
+                # Skip structural FITS keywords
+                if key in ("SIMPLE", "BITPIX", "NAXIS", "NAXIS1",
+                           "NAXIS2", "EXTEND", "HISTORY", "COMMENT",
+                           "", "IMAGEW", "IMAGEH"):
+                    continue
+
+                # Adjust reference pixel back to original image coords
+                if key in ("CRPIX1", "CRPIX2") and isinstance(val, (int, float)):
+                    hdr[key] = val / scale
+                # Adjust CD matrix: each original pixel covers more sky
+                elif key in ("CD1_1", "CD1_2", "CD2_1", "CD2_2") and isinstance(val, (int, float)):
+                    hdr[key] = val * scale
+                # Adjust CDELT similarly
+                elif key in ("CDELT1", "CDELT2") and isinstance(val, (int, float)):
+                    hdr[key] = val * scale
+                else:
                     hdr[key] = val
+
+            # If we have a CD matrix, remove CDELT to avoid conflicts
+            if "CD1_1" in hdr:
+                hdr.pop("CDELT1", None)
+                hdr.pop("CDELT2", None)
+        else:
+            # No WCS header from API — use basic CDELT from pixel scale
+            hdr["CDELT1"] = -(orig_pixel_scale / 3600.0)
+            hdr["CDELT2"] = orig_pixel_scale / 3600.0
 
         return hdr
 
