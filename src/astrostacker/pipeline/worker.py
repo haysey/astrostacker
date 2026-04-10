@@ -22,6 +22,7 @@ class PipelineWorker(QObject):
     progress_update = pyqtSignal(int, int, str)
     finished = pyqtSignal(np.ndarray)
     error = pyqtSignal(str)
+    cancelled = pyqtSignal()
 
     def __init__(self, config: PipelineConfig):
         super().__init__()
@@ -48,6 +49,7 @@ class PipelineWorker(QObject):
             self.finished.emit(result)
         except InterruptedError:
             self.status_update.emit("Pipeline cancelled.")
+            self.cancelled.emit()
         except Exception as e:
             self.error.emit(f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
 
@@ -71,5 +73,6 @@ def create_worker_thread(config: PipelineConfig) -> tuple[QThread, PipelineWorke
     thread.started.connect(worker.run)
     worker.finished.connect(thread.quit)
     worker.error.connect(thread.quit)
+    worker.cancelled.connect(thread.quit)
 
     return thread, worker
