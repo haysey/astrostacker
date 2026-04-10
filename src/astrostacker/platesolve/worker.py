@@ -21,6 +21,7 @@ class SolveWorker(QObject):
     status_update = pyqtSignal(str)
     finished = pyqtSignal(object)  # SolveResult
     error = pyqtSignal(str)
+    cancelled = pyqtSignal()
 
     def __init__(
         self,
@@ -55,6 +56,7 @@ class SolveWorker(QObject):
             self.finished.emit(result)
         except InterruptedError:
             self.status_update.emit("Plate solve cancelled.")
+            self.cancelled.emit()
         except Exception as e:
             self.error.emit(f"{type(e).__name__}: {e}")
 
@@ -84,5 +86,6 @@ def create_solve_thread(
     thread.started.connect(worker.run)
     worker.finished.connect(thread.quit)
     worker.error.connect(thread.quit)
+    worker.cancelled.connect(thread.quit)
 
     return thread, worker
