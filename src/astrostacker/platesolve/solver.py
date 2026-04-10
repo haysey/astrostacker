@@ -138,15 +138,12 @@ def _image_to_fits_bytes(path: str) -> bytes:
     The image is stretched by SOLVE_IMAGE_SCALE (20%) before conversion
     so that the solved/annotated result is larger and easier to read.
     """
-    ext = Path(path).suffix.lower()
-    if ext in (".fits", ".fit", ".fts"):
-        with fits.open(path) as hdul:
-            data = hdul[0].data.astype(np.float32)
-    else:
-        data = load_image(path)
+    # Use load_image for all formats — it handles byte order,
+    # and transposes colour FITS from (C,H,W) to (H,W,C)
+    data = load_image(path)
 
     if data.ndim == 3:
-        # Convert to mono for solving (luminance)
+        # Convert colour (H,W,C) to mono luminance for solving
         data = np.mean(data, axis=2)
 
     # Stretch image by 20% before solving for better readability
