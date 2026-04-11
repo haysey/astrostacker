@@ -80,7 +80,7 @@ def _stretch_channel(
     shadow_clip = median_val - 2.8 * sigma_est
     shadow_clip = max(shadow_clip, float(np.min(valid)))
 
-    highlight = float(np.max(valid))
+    highlight = float(np.percentile(valid, 99.9))
 
     # Normalize to [0, 1]
     data_range = highlight - shadow_clip
@@ -112,19 +112,21 @@ def _stretch_channel(
 def midtone_balance(median_norm: float, target: float) -> float:
     """Compute the midtone balance parameter.
 
-    Finds m such that MTF(median_norm, m) ~ target.
+    Finds m such that MTF(median_norm, m) = target.
+
+    Derived by solving MTF(x, m) = t for m:
+        m = x * (t - 1) / (2*t*x - t - x)
     """
     if median_norm <= 0:
         return 0.5
     if median_norm >= 1:
         return 0.5
 
-    # Analytical solution
-    m = (
-        (median_norm - 1.0) * target
-    ) / (
-        (2.0 * target - 1.0) * median_norm - target
-    )
+    denom = 2.0 * target * median_norm - target - median_norm
+    if abs(denom) < 1e-10:
+        return 0.5
+
+    m = median_norm * (target - 1.0) / denom
     return float(np.clip(m, 0.001, 0.999))
 
 
