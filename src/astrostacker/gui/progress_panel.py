@@ -51,12 +51,15 @@ class ProgressPanel(QWidget):
 
         layout.addLayout(progress_layout)
 
-        # Log output
+        # Log output — stretch to fill available space
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMaximumHeight(80)
         self.log_text.setPlaceholderText("Pipeline output will appear here...")
-        layout.addWidget(self.log_text)
+        self.log_text.setStyleSheet(
+            "font-size: 14px;"
+            "line-height: 1.4;"
+        )
+        layout.addWidget(self.log_text, stretch=1)
 
         # Start/Cancel button - fixed height container so it never gets clipped
         btn_container = QWidget()
