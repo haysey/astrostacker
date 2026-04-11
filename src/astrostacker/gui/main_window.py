@@ -27,6 +27,7 @@ from astrostacker.pipeline.pipeline import PipelineConfig
 from astrostacker.pipeline.worker import PipelineWorker, create_worker_thread
 from astrostacker.platesolve.solver import SolveResult
 from astrostacker.platesolve.worker import SolveWorker, create_solve_thread
+from astrostacker.utils.sounds import play_error, play_success
 
 # macOS-native dark palette
 MACOS_STYLESHEET = """
@@ -542,6 +543,8 @@ class MainWindow(QMainWindow):
         # Auto plate solve if the user ticked the checkbox
         if self.settings_panel.get_auto_solve():
             self._start_auto_solve()
+        else:
+            play_success()
 
     def _embed_existing_wcs(self):
         """Embed WCS from a previous plate solve into the stacked FITS."""
@@ -627,8 +630,11 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.progress_panel.log(f"WCS embed warning: {e}")
 
+        play_success()
+
     def _on_auto_solve_error(self, message: str):
         self.progress_panel.log(f"Auto plate solve failed: {message}")
+        play_error()
 
     def _on_auto_solve_thread_done(self):
         self._solve_worker = None
@@ -637,6 +643,7 @@ class MainWindow(QMainWindow):
 
     def _on_error(self, message: str):
         self.progress_panel.log(f"ERROR: {message}")
+        play_error()
         QMessageBox.critical(self, "Pipeline Error", message)
 
     def _on_thread_done(self):

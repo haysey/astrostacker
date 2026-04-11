@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QSettings, QThread, Qt
+
+from astrostacker.utils.sounds import play_error, play_success
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -256,6 +258,7 @@ class PlateSolvePanel(QWidget):
         self.write_wcs_btn.setEnabled(True)
         self.results_text.clear()
         self.results_text.append(result.summary())
+        play_success()
 
         # Open the annotated solution window
         path = self._current_path or self.image_path_input.text()
@@ -269,6 +272,7 @@ class PlateSolvePanel(QWidget):
 
     def _on_error(self, msg: str):
         self.results_text.append(f"\nERROR: {msg}")
+        play_error()
 
     def _on_thread_done(self):
         self.solve_btn.setText("Solve")
