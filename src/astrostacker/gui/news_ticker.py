@@ -201,9 +201,20 @@ class NewsTicker(QWidget):
             self._scroll_pos = 0
 
     def mousePressEvent(self, event):
-        """Open the currently visible headline's URL in the browser."""
-        if self._headlines:
-            idx = self._get_current_headline_index()
+        """Open the clicked headline's URL in the browser."""
+        if self._headlines and self._full_text:
+            # Map click X position to character offset in the scrolling text
+            char_width = max(1, self.width() / max(1, self._display_width))
+            click_char = int(event.position().x() / char_width)
+            abs_pos = (self._scroll_pos + click_char) % len(self._full_text)
+
+            # Find which headline contains that position
+            idx = 0
+            for i in range(len(self._headline_offsets) - 1, -1, -1):
+                if abs_pos >= self._headline_offsets[i]:
+                    idx = i
+                    break
+
             url = self._headlines[idx].url
             if url:
                 webbrowser.open(url)
