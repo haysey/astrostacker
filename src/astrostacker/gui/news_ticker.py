@@ -134,7 +134,7 @@ class NewsTicker(QWidget):
         # Scroll timer
         self._scroll_timer = QTimer(self)
         self._scroll_timer.timeout.connect(self._tick)
-        self._scroll_timer.setInterval(80)  # smooth scrolling, ~30% slower
+        self._scroll_timer.setInterval(100)  # smooth scrolling
 
         # Fetch headlines in background thread
         self._fetch_thread = QThread()
@@ -205,14 +205,38 @@ class NewsTicker(QWidget):
         if self._scroll_pos >= len(self._full_text):
             self._scroll_pos = 0
 
+    def enterEvent(self, event):
+        """Pause scrolling when mouse hovers over the ticker."""
+        self._scroll_timer.stop()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        """Resume scrolling when mouse leaves the ticker."""
+        if self._full_text:
+            self._scroll_timer.start()
+        super().leaveEvent(event)
+
     def mousePressEvent(self, event):
         """Open the clicked headline's URL in the browser."""
         if self._headlines and self._full_text:
-            # Map click X position to character offset in the scrolling text.
-            # Use _render_pos (not _scroll_pos) to match what's on screen.
-            char_width = max(1, self.width() / max(1, self._display_width))
-            click_char = int(event.position().x() / char_width)
-            abs_pos = (self._render_pos + click_char) % len(self._full_text)
+            # Get the currently displayed text
+            doubled = self._full_text + self._full_text
+            visible = doubled[self._render_pos:self._render_pos + self._display_width]
+
+            # Use font metrics for accurate pixel-to-character mapping
+            fm = self._label.fontMetrics()
+            click_x = event.position().x() - 8  # account for label padding
+
+            # Find which character the click lands on
+            char_idx = 0
+            for i in range(1, len(visible) + 1):
+                if fm.horizontalAdvance(visible[:i]) > click_x:
+                    char_idx = i - 1
+                    break
+            else:
+                char_idx = len(visible) - 1
+
+            abs_pos = (self._render_pos + char_idx) % len(self._full_text)
 
             # Find which headline contains that position
             idx = 0
