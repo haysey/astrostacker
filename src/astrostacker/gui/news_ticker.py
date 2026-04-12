@@ -125,6 +125,7 @@ class NewsTicker(QWidget):
         self._headlines: List[HeadlineItem] = []
         self._full_text = ""
         self._scroll_pos = 0
+        self._render_pos = 0  # scroll position used for the last rendered frame
         self._display_width = 120  # characters visible at once
 
         # Track which headline index is currently centred on screen
@@ -191,6 +192,10 @@ class NewsTicker(QWidget):
         if not self._full_text:
             return
 
+        # Save the position used for this frame so click handler
+        # matches what's actually on screen (not the next frame)
+        self._render_pos = self._scroll_pos
+
         # Create a window into the scrolling text (seamless loop)
         doubled = self._full_text + self._full_text
         visible = doubled[self._scroll_pos:self._scroll_pos + self._display_width]
@@ -203,10 +208,11 @@ class NewsTicker(QWidget):
     def mousePressEvent(self, event):
         """Open the clicked headline's URL in the browser."""
         if self._headlines and self._full_text:
-            # Map click X position to character offset in the scrolling text
+            # Map click X position to character offset in the scrolling text.
+            # Use _render_pos (not _scroll_pos) to match what's on screen.
             char_width = max(1, self.width() / max(1, self._display_width))
             click_char = int(event.position().x() / char_width)
-            abs_pos = (self._scroll_pos + click_char) % len(self._full_text)
+            abs_pos = (self._render_pos + click_char) % len(self._full_text)
 
             # Find which headline contains that position
             idx = 0
