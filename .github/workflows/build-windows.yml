@@ -1,4 +1,4 @@
-name: Build Windows App
+name: Build All Platforms
 
 on:
   workflow_dispatch:  # Manual trigger from GitHub website
@@ -34,8 +34,8 @@ jobs:
           path: dist/Hayseys Astrostacker/
           retention-days: 90
 
-  build-macos:
-    name: macOS Build
+  build-macos-apple-silicon:
+    name: macOS Apple Silicon Build
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -55,9 +55,37 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller astrostacker.spec --clean
 
-      - name: Upload macOS build
+      - name: Upload macOS Apple Silicon build
         uses: actions/upload-artifact@v4
         with:
-          name: Hayseys-Astrostacker-macOS
+          name: Hayseys-Astrostacker-macOS-AppleSilicon
+          path: dist/Hayseys Astrostacker.app/
+          retention-days: 90
+
+  build-macos-intel:
+    name: macOS Intel Build
+    runs-on: macos-13
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller astrostacker.spec --clean
+
+      - name: Upload macOS Intel build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hayseys-Astrostacker-macOS-Intel
           path: dist/Hayseys Astrostacker.app/
           retention-days: 90
