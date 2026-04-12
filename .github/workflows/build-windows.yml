@@ -55,11 +55,14 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller astrostacker.spec --clean
 
+      - name: Zip macOS app bundle
+        run: cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-AppleSilicon.zip" "Hayseys Astrostacker.app"
+
       - name: Upload macOS Apple Silicon build
         uses: actions/upload-artifact@v4
         with:
           name: Hayseys-Astrostacker-macOS-AppleSilicon
-          path: dist/Hayseys Astrostacker.app/
+          path: Hayseys-Astrostacker-macOS-AppleSilicon.zip
           retention-days: 90
 
   build-macos-intel:
@@ -84,9 +87,12 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller astrostacker.spec --clean
 
+      - name: Zip macOS app bundle
+        run: cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-Intel.zip" "Hayseys Astrostacker.app"
+
       - name: Upload macOS Intel build
         uses: actions/upload-artifact@v4
         with:
           name: Hayseys-Astrostacker-macOS-Intel
-          path: dist/Hayseys Astrostacker.app/
+          path: Hayseys-Astrostacker-macOS-Intel.zip
           retention-days: 90
