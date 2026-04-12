@@ -491,6 +491,9 @@ class MainWindow(QMainWindow):
         if self._worker is not None:
             self._worker.cancel()
             return
+        if self._solve_worker is not None:
+            self._solve_worker.cancel()
+            return
 
         light_paths = self.file_panel.get_light_paths()
         if not light_paths:
