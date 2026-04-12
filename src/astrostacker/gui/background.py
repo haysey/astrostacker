@@ -6,6 +6,8 @@ nebula glow — entirely procedurally, no external image files needed.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QBrush, QImage, QPainter, QPalette, QPixmap, QRadialGradient, QColor
@@ -126,6 +128,29 @@ def generate_background_pixmap(width: int, height: int) -> QPixmap:
         int(width * 0.05), int(height * 0.55),
         int(min(width, height) * 0.6), int(min(width, height) * 0.5)
     )
+
+    # Faint logo watermark in the centre
+    logo_path = Path(__file__).resolve().parent.parent.parent.parent / "icon.png"
+    if not logo_path.exists():
+        # PyInstaller bundle: icon.png next to the executable
+        import sys
+        logo_path = Path(getattr(sys, "_MEIPASS", ".")) / "icon.png"
+    if logo_path.exists():
+        logo = QPixmap(str(logo_path))
+        logo_size = int(min(width, height) * 0.45)
+        logo = logo.scaled(
+            logo_size, logo_size,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        lx = (width - logo.width()) // 2
+        ly = (height - logo.height()) // 2
+        painter.setCompositionMode(
+            QPainter.CompositionMode.CompositionMode_SourceOver
+        )
+        painter.setOpacity(0.20)
+        painter.drawPixmap(lx, ly, logo)
+        painter.setOpacity(1.0)
 
     painter.end()
     return pixmap

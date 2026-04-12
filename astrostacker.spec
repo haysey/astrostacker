@@ -58,7 +58,8 @@ datas = (
     collect_data_files('certifi') +
     copy_metadata('astropy') +
     copy_metadata('numpy') +
-    copy_metadata('xisf')
+    copy_metadata('xisf') +
+    [('icon.png', '.')]
 )
 
 a = Analysis(
