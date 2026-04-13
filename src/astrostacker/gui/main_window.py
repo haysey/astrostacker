@@ -543,9 +543,8 @@ class MainWindow(QMainWindow):
         # Embed WCS from a previous plate solve if available
         self._embed_existing_wcs()
 
-        # Auto plate solve if the user ticked the checkbox AND has an API key
-        api_key = self.platesolve_panel.api_key_input.text().strip()
-        if self.settings_panel.get_auto_solve() and api_key:
+        # Auto plate solve if the user ticked the checkbox
+        if self.settings_panel.get_auto_solve():
             self._start_auto_solve()
         else:
             play_success()
@@ -580,8 +579,8 @@ class MainWindow(QMainWindow):
 
         if not api_key:
             self.progress_panel.log(
-                "Auto plate solve skipped — API key required. "
-                "Get a free key at nova.astrometry.net (sign up → My Profile → API key)"
+                "Auto plate solve skipped — no API key set in Plate Solve tab. "
+                "See README for info on how to get a free Astrometry API key."
             )
             play_success()
             return
