@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -92,9 +93,15 @@ class Pipeline:
         master_dark = None
         master_flat = None
 
+        # Directory to save master frames alongside the output file
+        output_dir = Path(self.config.output_path).parent
+
         if self.config.dark_paths:
             self._report("Building master dark frame...")
             master_dark = build_master_dark(self.config.dark_paths)
+            dark_path = str(output_dir / "master_dark.fits")
+            save_image(dark_path, master_dark)
+            self._report(f"Master dark saved → {dark_path}")
             self._check_cancel()
 
         if self.config.flat_paths:
@@ -103,6 +110,9 @@ class Pipeline:
                 self.config.flat_paths,
                 self.config.dark_flat_paths or None,
             )
+            flat_path = str(output_dir / "master_flat.fits")
+            save_image(flat_path, master_flat)
+            self._report(f"Master flat saved → {flat_path}")
             self._check_cancel()
 
         # Stage 2: Load and calibrate light frames
