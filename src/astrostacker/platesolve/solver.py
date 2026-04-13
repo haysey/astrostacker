@@ -469,7 +469,9 @@ class AstrometryNetSolver:
             resp.raise_for_status()
 
             # Response is a FITS file — parse its header
-            hdu_list = fits.open(io.BytesIO(resp.content))
+            hdu_list = fits.open(
+                io.BytesIO(resp.content), ignore_missing_simple=True
+            )
             header = hdu_list[0].header
             hdu_list.close()
 
@@ -483,8 +485,8 @@ class AstrometryNetSolver:
 
             self._report(f"WCS header retrieved ({len(wcs)} keywords)")
             return wcs if wcs else None
-        except Exception as e:
-            self._report(f"WCS retrieval failed (non-critical): {e}")
+        except Exception:
+            self._report("Using computed WCS from calibration data")
             return None
 
     def _get_calibration(self, job_id: int) -> SolveResult:
