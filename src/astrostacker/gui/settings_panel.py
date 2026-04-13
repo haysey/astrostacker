@@ -157,6 +157,44 @@ class SettingsPanel(QWidget):
 
         layout.addWidget(output_group)
 
+        # Processing options
+        proc_group = QGroupBox("Processing")
+        proc_layout = QFormLayout(proc_group)
+        proc_layout.setSpacing(10)
+        proc_layout.setContentsMargins(12, 20, 12, 12)
+
+        self.auto_reject_check = QCheckBox("Auto-reject blurry frames")
+        self.auto_reject_check.setToolTip(
+            "Score each frame by star sharpness (HFR) and automatically\n"
+            "reject frames that are significantly blurrier than average.\n"
+            "Requires at least 3 light frames."
+        )
+        proc_layout.addRow(self.auto_reject_check)
+
+        self.gradient_check = QCheckBox("Remove light pollution gradient")
+        self.gradient_check.setToolTip(
+            "Fits and subtracts a smooth background surface to remove\n"
+            "sky gradients from light pollution, moonlight, or vignetting."
+        )
+        proc_layout.addRow(self.gradient_check)
+
+        self.auto_crop_check = QCheckBox("Auto-crop stacking edges")
+        self.auto_crop_check.setToolTip(
+            "Automatically crop the black/NaN borders left by\n"
+            "frame alignment to give a clean rectangular result."
+        )
+        proc_layout.addRow(self.auto_crop_check)
+
+        self.drizzle_check = QCheckBox("Drizzle (2x resolution)")
+        self.drizzle_check.setToolTip(
+            "Use drizzle stacking to produce an image at 2x the native\n"
+            "pixel resolution. Best with well-dithered sub-exposures.\n"
+            "Output will be 4x larger in file size."
+        )
+        proc_layout.addRow(self.drizzle_check)
+
+        layout.addWidget(proc_group)
+
         # Auto plate solve
         self.auto_solve_check = QCheckBox("Auto plate solve after stacking")
         self.auto_solve_check.setToolTip(
@@ -216,6 +254,18 @@ class SettingsPanel(QWidget):
 
     def get_bayer_pattern(self) -> str:
         return self.bayer_combo.currentData()
+
+    def get_auto_reject(self) -> bool:
+        return self.auto_reject_check.isChecked()
+
+    def get_remove_gradient(self) -> bool:
+        return self.gradient_check.isChecked()
+
+    def get_auto_crop(self) -> bool:
+        return self.auto_crop_check.isChecked()
+
+    def get_drizzle(self) -> bool:
+        return self.drizzle_check.isChecked()
 
     def set_max_reference(self, count: int):
         self.reference_spin.setMaximum(max(0, count - 1))

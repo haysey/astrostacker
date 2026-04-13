@@ -127,6 +127,8 @@ class FilePanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._master_dark_path = ""
+        self._master_flat_path = ""
         self._setup_ui()
 
     def _setup_ui(self):
@@ -151,7 +153,65 @@ class FilePanel(QWidget):
             layout.addWidget(group)
             group.file_selected.connect(self.file_selected.emit)
 
+        # Master frame loaders
+        master_header = QLabel("OR LOAD EXISTING MASTERS")
+        master_header.setObjectName("sectionHeader")
+        layout.addWidget(master_header)
+
+        master_layout = QHBoxLayout()
+        master_layout.setSpacing(6)
+
+        self._master_dark_btn = QPushButton("Master Dark...")
+        self._master_dark_btn.setFixedHeight(26)
+        self._master_dark_btn.setToolTip(
+            "Load a pre-built master dark FITS file.\n"
+            "Overrides individual dark frames above."
+        )
+        self._master_dark_btn.clicked.connect(self._load_master_dark)
+        master_layout.addWidget(self._master_dark_btn)
+
+        self._master_flat_btn = QPushButton("Master Flat...")
+        self._master_flat_btn.setFixedHeight(26)
+        self._master_flat_btn.setToolTip(
+            "Load a pre-built master flat FITS file.\n"
+            "Overrides individual flat frames above."
+        )
+        self._master_flat_btn.clicked.connect(self._load_master_flat)
+        master_layout.addWidget(self._master_flat_btn)
+
+        layout.addLayout(master_layout)
+
+        self._master_dark_label = QLabel("")
+        self._master_dark_label.setStyleSheet(
+            "font-size: 10px; color: rgba(255,255,255,0.4);"
+        )
+        layout.addWidget(self._master_dark_label)
+
+        self._master_flat_label = QLabel("")
+        self._master_flat_label.setStyleSheet(
+            "font-size: 10px; color: rgba(255,255,255,0.4);"
+        )
+        layout.addWidget(self._master_flat_label)
+
         layout.addStretch()
+
+    def _load_master_dark(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Load Master Dark", "", FILE_FILTER
+        )
+        if path:
+            self._master_dark_path = path
+            self._master_dark_label.setText(f"Dark: {Path(path).name}")
+            self._master_dark_btn.setText("Master Dark ✓")
+
+    def _load_master_flat(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Load Master Flat", "", FILE_FILTER
+        )
+        if path:
+            self._master_flat_path = path
+            self._master_flat_label.setText(f"Flat: {Path(path).name}")
+            self._master_flat_btn.setText("Master Flat ✓")
 
     def get_light_paths(self) -> list[str]:
         return self.lights.get_paths()
@@ -164,3 +224,9 @@ class FilePanel(QWidget):
 
     def get_dark_flat_paths(self) -> list[str]:
         return self.dark_flats.get_paths()
+
+    def get_master_dark_path(self) -> str:
+        return self._master_dark_path
+
+    def get_master_flat_path(self) -> str:
+        return self._master_flat_path

@@ -16,7 +16,10 @@ from astrostacker.calibration.master_frames import build_master_dark, build_mast
 from astrostacker.config import CAMERA_COLOUR, CAMERA_MONO
 from astrostacker.io.loader import load_image, save_image
 from astrostacker.stacking.stacker import stack_images
+from astrostacker.stacking.drizzle import drizzle_stack
 from astrostacker.utils.debayer import debayer
+from astrostacker.utils.frame_quality import score_frames
+from astrostacker.utils.gradient import remove_gradient
 from astrostacker.utils.parallel import optimal_workers, parallel_load_images
 
 
@@ -29,6 +32,10 @@ class PipelineConfig:
     flat_paths: list[str] = field(default_factory=list)
     dark_flat_paths: list[str] = field(default_factory=list)
 
+    # Pre-built master frames (skip building from individual frames)
+    master_dark_path: str = ""
+    master_flat_path: str = ""
+
     stacking_method: str = "sigma_clip"
     sigma_low: float = 2.5
     sigma_high: float = 2.5
@@ -38,6 +45,20 @@ class PipelineConfig:
 
     output_path: str = "stacked.fits"
     reference_frame: int = 0
+
+    # Frame rejection
+    auto_reject: bool = False
+    rejection_sigma: float = 2.0
+
+    # Gradient removal
+    remove_gradient: bool = False
+
+    # Drizzle
+    drizzle: bool = False
+    drizzle_scale: int = 2
+
+    # Auto-crop stacking edges
+    auto_crop: bool = False
 
 
 class Pipeline:
@@ -89,22 +110,28 @@ class Pipeline:
 
         self.cancelled = False
 
-        # Stage 1: Build master calibration frames
+        # Stage 1: Build or load master calibration frames
         master_dark = None
         master_flat = None
 
         # Directory to save master frames alongside the output file
         output_dir = Path(self.config.output_path).parent
 
-        if self.config.dark_paths:
+        if self.config.master_dark_path:
+            self._report(f"Loading master dark: {Path(self.config.master_dark_path).name}")
+            master_dark = load_image(self.config.master_dark_path)
+        elif self.config.dark_paths:
             self._report("Building master dark frame...")
             master_dark = build_master_dark(self.config.dark_paths)
             dark_path = str(output_dir / "master_dark.fits")
             save_image(dark_path, master_dark)
             self._report(f"Master dark saved → {dark_path}")
-            self._check_cancel()
+        self._check_cancel()
 
-        if self.config.flat_paths:
+        if self.config.master_flat_path:
+            self._report(f"Loading master flat: {Path(self.config.master_flat_path).name}")
+            master_flat = load_image(self.config.master_flat_path)
+        elif self.config.flat_paths:
             self._report("Building master flat frame...")
             master_flat = build_master_flat(
                 self.config.flat_paths,
@@ -113,7 +140,7 @@ class Pipeline:
             flat_path = str(output_dir / "master_flat.fits")
             save_image(flat_path, master_flat)
             self._report(f"Master flat saved → {flat_path}")
-            self._check_cancel()
+        self._check_cancel()
 
         # Stage 2: Load and calibrate light frames
         #   - Parallel I/O for loading
@@ -162,6 +189,29 @@ class Pipeline:
         else:
             self._report("Camera set to Mono — skipping debayer")
 
+        # Stage 2b: Auto frame rejection
+        if self.config.auto_reject and len(calibrated) >= 3:
+            self._report("Scoring frame quality (star sharpness)...")
+            scores = score_frames(calibrated, self.config.rejection_sigma)
+            kept = []
+            rejected_count = 0
+            for idx, hfr, keep in scores:
+                if keep:
+                    kept.append(calibrated[idx])
+                    self._report(f"  Frame {idx}: HFR={hfr:.2f}px — kept")
+                else:
+                    rejected_count += 1
+                    self._report(f"  Frame {idx}: HFR={hfr:.2f}px — REJECTED")
+            if len(kept) >= 2:
+                self._report(
+                    f"Frame rejection: kept {len(kept)}/{len(calibrated)}, "
+                    f"rejected {rejected_count}"
+                )
+                calibrated = kept
+            else:
+                self._report("Too few frames would remain — keeping all")
+            self._check_cancel()
+
         # Stage 3: Align calibrated frames
         self._report("Aligning frames...")
 
@@ -171,7 +221,7 @@ class Pipeline:
 
         aligned = align_frames(
             calibrated,
-            reference_index=self.config.reference_frame,
+            reference_index=min(self.config.reference_frame, len(calibrated) - 1),
             progress_callback=align_progress,
             status_callback=self._report,
         )
@@ -184,14 +234,34 @@ class Pipeline:
             )
 
         # Stage 4: Stack
-        self._report(f"Stacking {len(aligned)} frames ({self.config.stacking_method})...")
-        kwargs = {}
-        if self.config.stacking_method == "sigma_clip":
-            kwargs["sigma_low"] = self.config.sigma_low
-            kwargs["sigma_high"] = self.config.sigma_high
+        if self.config.drizzle:
+            self._report(
+                f"Drizzle stacking {len(aligned)} frames "
+                f"({self.config.drizzle_scale}x upscale)..."
+            )
+            result = drizzle_stack(
+                aligned, scale=self.config.drizzle_scale
+            )
+        else:
+            self._report(f"Stacking {len(aligned)} frames ({self.config.stacking_method})...")
+            kwargs = {}
+            if self.config.stacking_method == "sigma_clip":
+                kwargs["sigma_low"] = self.config.sigma_low
+                kwargs["sigma_high"] = self.config.sigma_high
 
-        result = stack_images(aligned, method=self.config.stacking_method, **kwargs)
+            result = stack_images(aligned, method=self.config.stacking_method, **kwargs)
         self._check_cancel()
+
+        # Stage 4b: Auto-crop stacking edges (NaN/zero borders)
+        if self.config.auto_crop:
+            result = self._auto_crop(result)
+            self._check_cancel()
+
+        # Stage 4c: Gradient removal
+        if self.config.remove_gradient:
+            self._report("Removing light pollution gradient...")
+            result = remove_gradient(result)
+            self._check_cancel()
 
         # Stage 5: Save
         colour_info = "RGB colour" if result.ndim == 3 else "mono"
@@ -200,3 +270,36 @@ class Pipeline:
 
         self._report("Done!")
         return result
+
+    def _auto_crop(self, data: np.ndarray) -> np.ndarray:
+        """Crop NaN/zero borders left by alignment."""
+        self._report("Auto-cropping stacking edges...")
+
+        if data.ndim == 3:
+            # Use sum across channels to find valid pixels
+            mask = np.all(np.isfinite(data), axis=2) & np.any(data > 0, axis=2)
+        else:
+            mask = np.isfinite(data) & (data > 0)
+
+        rows = np.any(mask, axis=1)
+        cols = np.any(mask, axis=0)
+
+        if not np.any(rows) or not np.any(cols):
+            return data
+
+        r_min, r_max = np.where(rows)[0][[0, -1]]
+        c_min, c_max = np.where(cols)[0][[0, -1]]
+
+        # Add small margin
+        margin = 2
+        r_min = max(0, r_min + margin)
+        r_max = min(data.shape[0] - 1, r_max - margin)
+        c_min = max(0, c_min + margin)
+        c_max = min(data.shape[1] - 1, c_max - margin)
+
+        cropped = data[r_min:r_max + 1, c_min:c_max + 1]
+        self._report(
+            f"Cropped from {data.shape[1]}x{data.shape[0]} "
+            f"to {cropped.shape[1]}x{cropped.shape[0]}"
+        )
+        return cropped

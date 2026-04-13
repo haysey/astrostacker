@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import numpy as np
-from PyQt6.QtCore import QThread, Qt
-from PyQt6.QtGui import QBrush, QFont, QPalette, QPixmap
+import json
+from pathlib import Path
+
+from PyQt6.QtCore import QSettings, QThread, Qt
+from PyQt6.QtGui import QAction, QBrush, QFont, QPalette, QPixmap
 from PyQt6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QMainWindow,
+    QMenuBar,
     QMessageBox,
     QSplitter,
     QTabWidget,
@@ -17,7 +22,10 @@ from PyQt6.QtWidgets import (
 
 from astrostacker.config import APP_NAME, APP_VERSION
 from astrostacker.gui.background import generate_background_pixmap
+from astrostacker.gui.blink_dialog import BlinkDialog
 from astrostacker.gui.file_panel import FilePanel
+from astrostacker.gui.fits_header_dialog import FitsHeaderDialog, read_fits_header
+from astrostacker.gui.histogram_panel import HistogramPanel
 from astrostacker.gui.news_ticker import NewsTicker
 from astrostacker.gui.platesolve_panel import PlateSolvePanel
 from astrostacker.gui.preview_panel import PreviewPanel
@@ -382,7 +390,9 @@ class MainWindow(QMainWindow):
         self._thread: QThread | None = None
         self._solve_worker: SolveWorker | None = None
         self._solve_thread: QThread | None = None
+        self._last_aligned_frames: list | None = None
         self._setup_ui()
+        self._setup_menu_bar()
         self._connect_signals()
 
     def _setup_ui(self):
@@ -435,8 +445,21 @@ class MainWindow(QMainWindow):
         v_splitter.setHandleWidth(1)
         v_splitter.setChildrenCollapsible(False)
 
+        # Preview + histogram side by side
+        preview_area = QWidget()
+        preview_layout = QHBoxLayout(preview_area)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(0)
+
         self.preview_panel = PreviewPanel()
-        v_splitter.addWidget(self.preview_panel)
+        preview_layout.addWidget(self.preview_panel, stretch=1)
+
+        self.histogram_panel = HistogramPanel()
+        self.histogram_panel.setMaximumWidth(280)
+        self.histogram_panel.setMinimumWidth(200)
+        preview_layout.addWidget(self.histogram_panel)
+
+        v_splitter.addWidget(preview_area)
 
         # Bottom: settings and progress side by side
         bottom_widget = QWidget()
@@ -474,6 +497,41 @@ class MainWindow(QMainWindow):
         self.news_ticker = NewsTicker()
         main_layout.addWidget(self.news_ticker)
 
+    def _setup_menu_bar(self):
+        menu_bar = self.menuBar()
+
+        # File menu
+        file_menu = menu_bar.addMenu("File")
+
+        save_session_action = QAction("Save Session...", self)
+        save_session_action.triggered.connect(self._save_session)
+        file_menu.addAction(save_session_action)
+
+        load_session_action = QAction("Load Session...", self)
+        load_session_action.triggered.connect(self._load_session)
+        file_menu.addAction(load_session_action)
+
+        file_menu.addSeparator()
+
+        export_tiff = QAction("Export as TIFF...", self)
+        export_tiff.triggered.connect(lambda: self._export_image("tiff"))
+        file_menu.addAction(export_tiff)
+
+        export_png = QAction("Export as PNG...", self)
+        export_png.triggered.connect(lambda: self._export_image("png"))
+        file_menu.addAction(export_png)
+
+        # Tools menu
+        tools_menu = menu_bar.addMenu("Tools")
+
+        blink_action = QAction("Blink Comparator...", self)
+        blink_action.triggered.connect(self._open_blink)
+        tools_menu.addAction(blink_action)
+
+        header_action = QAction("View FITS Header...", self)
+        header_action.triggered.connect(self._view_fits_header)
+        tools_menu.addAction(header_action)
+
     def _connect_signals(self):
         self.file_panel.file_selected.connect(self._on_file_selected)
         self.progress_panel.start_btn.clicked.connect(self._on_start_cancel)
@@ -482,6 +540,13 @@ class MainWindow(QMainWindow):
     def _on_file_selected(self, path: str):
         self.preview_panel.show_file(path)
         self.platesolve_panel.set_image_path(path)
+        # Update histogram when a file is selected
+        try:
+            from astrostacker.io.loader import load_image
+            data = load_image(path)
+            self.histogram_panel.set_data(data)
+        except Exception:
+            pass
 
     def _on_lights_changed(self):
         count = self.file_panel.lights.count()
@@ -507,6 +572,8 @@ class MainWindow(QMainWindow):
             dark_paths=self.file_panel.get_dark_paths(),
             flat_paths=self.file_panel.get_flat_paths(),
             dark_flat_paths=self.file_panel.get_dark_flat_paths(),
+            master_dark_path=self.file_panel.get_master_dark_path(),
+            master_flat_path=self.file_panel.get_master_flat_path(),
             stacking_method=self.settings_panel.get_method(),
             sigma_low=self.settings_panel.get_sigma_low(),
             sigma_high=self.settings_panel.get_sigma_high(),
@@ -514,6 +581,10 @@ class MainWindow(QMainWindow):
             bayer_pattern=self.settings_panel.get_bayer_pattern(),
             output_path=self.settings_panel.get_output_path(),
             reference_frame=self.settings_panel.get_reference_frame(),
+            auto_reject=self.settings_panel.get_auto_reject(),
+            remove_gradient=self.settings_panel.get_remove_gradient(),
+            auto_crop=self.settings_panel.get_auto_crop(),
+            drizzle=self.settings_panel.get_drizzle(),
         )
 
         self.progress_panel.reset()
@@ -539,6 +610,7 @@ class MainWindow(QMainWindow):
         self.progress_panel.log("Stacking complete!")
         self.progress_panel.set_progress(100, 100, "Stacking done")
         self.preview_panel.show_data(result, info="Stacked Result")
+        self.histogram_panel.set_data(result)
 
         # Embed WCS from a previous plate solve if available
         self._embed_existing_wcs()
@@ -657,3 +729,200 @@ class MainWindow(QMainWindow):
             self.progress_panel.set_running(False)
         self._worker = None
         self._thread = None
+
+    # ── Session save/load ──
+
+    def _save_session(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Session", "", "Astrostacker Session (*.json)"
+        )
+        if not path:
+            return
+
+        session = {
+            "light_paths": self.file_panel.get_light_paths(),
+            "dark_paths": self.file_panel.get_dark_paths(),
+            "flat_paths": self.file_panel.get_flat_paths(),
+            "dark_flat_paths": self.file_panel.get_dark_flat_paths(),
+            "master_dark_path": self.file_panel.get_master_dark_path(),
+            "master_flat_path": self.file_panel.get_master_flat_path(),
+            "stacking_method": self.settings_panel.get_method(),
+            "sigma_low": self.settings_panel.get_sigma_low(),
+            "sigma_high": self.settings_panel.get_sigma_high(),
+            "camera_type": self.settings_panel.get_camera_type(),
+            "bayer_pattern": self.settings_panel.get_bayer_pattern(),
+            "output_path": self.settings_panel.get_output_path(),
+            "reference_frame": self.settings_panel.get_reference_frame(),
+            "auto_reject": self.settings_panel.get_auto_reject(),
+            "remove_gradient": self.settings_panel.get_remove_gradient(),
+            "auto_crop": self.settings_panel.get_auto_crop(),
+            "drizzle": self.settings_panel.get_drizzle(),
+            "auto_solve": self.settings_panel.get_auto_solve(),
+        }
+
+        try:
+            with open(path, "w") as f:
+                json.dump(session, f, indent=2)
+            self.progress_panel.log(f"Session saved to {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error", str(e))
+
+    def _load_session(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Load Session", "", "Astrostacker Session (*.json)"
+        )
+        if not path:
+            return
+
+        try:
+            with open(path) as f:
+                session = json.load(f)
+        except Exception as e:
+            QMessageBox.critical(self, "Load Error", str(e))
+            return
+
+        # Populate file lists
+        self._load_paths_into_list(
+            self.file_panel.lights, session.get("light_paths", [])
+        )
+        self._load_paths_into_list(
+            self.file_panel.darks, session.get("dark_paths", [])
+        )
+        self._load_paths_into_list(
+            self.file_panel.flats, session.get("flat_paths", [])
+        )
+        self._load_paths_into_list(
+            self.file_panel.dark_flats, session.get("dark_flat_paths", [])
+        )
+
+        # Master frames
+        md = session.get("master_dark_path", "")
+        if md:
+            self.file_panel._master_dark_path = md
+            self.file_panel._master_dark_label.setText(f"Dark: {Path(md).name}")
+            self.file_panel._master_dark_btn.setText("Master Dark ✓")
+
+        mf = session.get("master_flat_path", "")
+        if mf:
+            self.file_panel._master_flat_path = mf
+            self.file_panel._master_flat_label.setText(f"Flat: {Path(mf).name}")
+            self.file_panel._master_flat_btn.setText("Master Flat ✓")
+
+        # Settings
+        method = session.get("stacking_method", "sigma_clip")
+        idx = self.settings_panel.method_combo.findData(method)
+        if idx >= 0:
+            self.settings_panel.method_combo.setCurrentIndex(idx)
+
+        self.settings_panel.sigma_low_spin.setValue(session.get("sigma_low", 2.5))
+        self.settings_panel.sigma_high_spin.setValue(session.get("sigma_high", 2.5))
+        self.settings_panel.output_path.setText(session.get("output_path", "stacked.fits"))
+        self.settings_panel.reference_spin.setValue(session.get("reference_frame", 0))
+
+        cam = session.get("camera_type", "mono")
+        idx = self.settings_panel.camera_combo.findData(cam)
+        if idx >= 0:
+            self.settings_panel.camera_combo.setCurrentIndex(idx)
+
+        pat = session.get("bayer_pattern", "RGGB")
+        idx = self.settings_panel.bayer_combo.findData(pat)
+        if idx >= 0:
+            self.settings_panel.bayer_combo.setCurrentIndex(idx)
+
+        self.settings_panel.auto_reject_check.setChecked(session.get("auto_reject", False))
+        self.settings_panel.gradient_check.setChecked(session.get("remove_gradient", False))
+        self.settings_panel.auto_crop_check.setChecked(session.get("auto_crop", False))
+        self.settings_panel.drizzle_check.setChecked(session.get("drizzle", False))
+        self.settings_panel.auto_solve_check.setChecked(session.get("auto_solve", False))
+
+        self.progress_panel.log(f"Session loaded from {path}")
+
+    def _load_paths_into_list(self, group, paths: list[str]):
+        """Populate a FrameListGroup from a list of file paths."""
+        from PyQt6.QtWidgets import QListWidgetItem
+        group.list_widget.clear()
+        for p in paths:
+            if Path(p).exists():
+                item = QListWidgetItem(Path(p).name)
+                item.setData(Qt.ItemDataRole.UserRole, p)
+                item.setToolTip(p)
+                group.list_widget.addItem(item)
+        group._update_header()
+
+    # ── Export ──
+
+    def _export_image(self, fmt: str):
+        """Export the current preview image as TIFF or PNG with auto-stretch."""
+        raw = self.preview_panel._raw_data
+        if raw is None:
+            QMessageBox.information(self, "No Image", "No image to export. Run the pipeline first.")
+            return
+
+        if fmt == "tiff":
+            filter_str = "TIFF Image (*.tiff *.tif)"
+            default_ext = ".tiff"
+        else:
+            filter_str = "PNG Image (*.png)"
+            default_ext = ".png"
+
+        path, _ = QFileDialog.getSaveFileName(self, "Export Image", "", filter_str)
+        if not path:
+            return
+
+        if not path.lower().endswith(default_ext) and "." not in Path(path).name:
+            path += default_ext
+
+        try:
+            from astrostacker.utils.stretch import auto_stretch
+            from astrostacker.utils.image_utils import numpy_to_qpixmap
+            stretched = auto_stretch(raw)
+            pixmap = numpy_to_qpixmap(stretched)
+            pixmap.save(path)
+            self.progress_panel.log(f"Exported {fmt.upper()} to {path}")
+            QMessageBox.information(self, "Exported", f"Image exported to:\n{path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", str(e))
+
+    # ── Blink comparator ──
+
+    def _open_blink(self):
+        """Open the blink comparator with loaded light frames."""
+        paths = self.file_panel.get_light_paths()
+        if len(paths) < 2:
+            QMessageBox.information(
+                self, "Need Frames",
+                "Add at least 2 light frames to use the Blink Comparator."
+            )
+            return
+
+        self.progress_panel.log("Loading frames for blink comparator...")
+        try:
+            from astrostacker.io.loader import load_image
+            frames = [load_image(p) for p in paths]
+            dlg = BlinkDialog(frames, parent=self)
+            dlg.exec()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+
+    # ── FITS header viewer ──
+
+    def _view_fits_header(self):
+        """Show FITS header of the currently selected or output file."""
+        # Try the plate solve panel path first, then the output path
+        path = ""
+        if hasattr(self.platesolve_panel, '_image_path'):
+            path = self.platesolve_panel._image_path or ""
+        if not path:
+            path = self.settings_panel.get_output_path()
+        if not path or not Path(path).exists():
+            # Ask user to pick a file
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Select FITS File", "",
+                "FITS Files (*.fits *.fit *.fts);;All Files (*)"
+            )
+        if not path:
+            return
+
+        header_text = read_fits_header(path)
+        dlg = FitsHeaderDialog(header_text, file_path=path, parent=self)
+        dlg.exec()
