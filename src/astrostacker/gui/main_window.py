@@ -394,6 +394,19 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._setup_menu_bar()
         self._connect_signals()
+        self._size_to_screen()
+
+    def _size_to_screen(self):
+        """Open at 75% of the screen size, centred."""
+        from PyQt6.QtWidgets import QApplication
+        screen = QApplication.primaryScreen()
+        if screen:
+            geom = screen.availableGeometry()
+            w = int(geom.width() * 0.75)
+            h = int(geom.height() * 0.75)
+            x = geom.x() + (geom.width() - w) // 2
+            y = geom.y() + (geom.height() - h) // 2
+            self.setGeometry(x, y, w, h)
 
     def _setup_ui(self):
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
