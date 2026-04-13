@@ -27,6 +27,9 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller astrostacker.spec --clean
 
+      - name: Include README
+        run: copy README.md "dist\Hayseys Astrostacker\README.txt"
+
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
@@ -55,8 +58,10 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller astrostacker.spec --clean
 
-      - name: Zip macOS app bundle
-        run: cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-AppleSilicon.zip" "Hayseys Astrostacker.app"
+      - name: Zip macOS app bundle with README
+        run: |
+          cp README.md dist/README.txt
+          cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-AppleSilicon.zip" "Hayseys Astrostacker.app" "README.txt"
 
       - name: Upload macOS Apple Silicon build
         uses: actions/upload-artifact@v4
@@ -87,8 +92,10 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller astrostacker.spec --clean
 
-      - name: Zip macOS app bundle
-        run: cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-Intel.zip" "Hayseys Astrostacker.app"
+      - name: Zip macOS app bundle with README
+        run: |
+          cp README.md dist/README.txt
+          cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-Intel.zip" "Hayseys Astrostacker.app" "README.txt"
 
       - name: Upload macOS Intel build
         uses: actions/upload-artifact@v4
