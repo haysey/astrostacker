@@ -46,6 +46,15 @@ hidden_imports = [
     'PyQt6.QtCore',
     'PyQt6.QtGui',
     'PyQt6.QtWidgets',
+    # Astropy WCS (mosaic)
+    'astropy.wcs',
+    'astropy.wcs.utils',
+    'astropy.coordinates',
+    # Mosaic module
+    'astrostacker.mosaic',
+    'astrostacker.mosaic.mosaic',
+    'astrostacker.mosaic.worker',
+    'astrostacker.gui.mosaic_panel',
     # Core
     'numpy',
     'requests',
@@ -116,7 +125,7 @@ if sys.platform == 'darwin':
         icon='icon.icns',
         bundle_identifier='com.astrostacker.app',
         info_plist={
-            'CFBundleShortVersionString': '0.1.0',
+            'CFBundleShortVersionString': '0.2.0',
             'CFBundleName': "Haysey's Astrostacker",
             'NSHighResolutionCapable': True,
         },
