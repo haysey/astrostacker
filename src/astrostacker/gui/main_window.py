@@ -27,7 +27,9 @@ from astrostacker.gui.file_panel import FilePanel
 from astrostacker.gui.fits_header_dialog import FitsHeaderDialog, read_fits_header
 from astrostacker.gui.frame_status_bar import FrameStatusBar
 from astrostacker.gui.histogram_panel import HistogramPanel
+from astrostacker.gui.mosaic_panel import MosaicPanel
 from astrostacker.gui.platesolve_panel import PlateSolvePanel
+from astrostacker.mosaic.worker import MosaicWorker, create_mosaic_thread
 from astrostacker.gui.preview_panel import PreviewPanel
 from astrostacker.gui.progress_panel import ProgressPanel
 from astrostacker.gui.settings_panel import SettingsPanel
@@ -403,6 +405,8 @@ class MainWindow(QMainWindow):
         self._thread: QThread | None = None
         self._solve_worker: SolveWorker | None = None
         self._solve_thread: QThread | None = None
+        self._mosaic_worker: MosaicWorker | None = None
+        self._mosaic_thread: QThread | None = None
         self._last_aligned_frames: list | None = None
         self._setup_ui()
         self._setup_menu_bar()
@@ -446,9 +450,11 @@ class MainWindow(QMainWindow):
 
         self.file_panel = FilePanel()
         self.platesolve_panel = PlateSolvePanel()
+        self.mosaic_panel = MosaicPanel()
 
         self.sidebar_tabs.addTab(self.file_panel, "Stacking")
         self.sidebar_tabs.addTab(self.platesolve_panel, "Plate Solve")
+        self.sidebar_tabs.addTab(self.mosaic_panel, "Mosaic")
 
         sidebar_layout.addWidget(self.sidebar_tabs)
         h_splitter.addWidget(sidebar)
@@ -555,6 +561,7 @@ class MainWindow(QMainWindow):
         self.file_panel.file_selected.connect(self._on_file_selected)
         self.progress_panel.start_btn.clicked.connect(self._on_start_cancel)
         self.file_panel.lights.files_changed.connect(self._on_lights_changed)
+        self.mosaic_panel.build_btn.clicked.connect(self._on_build_mosaic)
 
     def _on_file_selected(self, path: str):
         self.preview_panel.show_file(path)
@@ -955,3 +962,48 @@ class MainWindow(QMainWindow):
         header_text = read_fits_header(path)
         dlg = FitsHeaderDialog(header_text, file_path=path, parent=self)
         dlg.exec()
+
+    # ── Mosaic ──
+
+    def _on_build_mosaic(self):
+        """Start building a mosaic from plate-solved panels."""
+        paths = self.mosaic_panel.get_panel_paths()
+        if len(paths) < 2:
+            QMessageBox.warning(
+                self, "Need Panels",
+                "Add at least 2 plate-solved FITS panels to build a mosaic."
+            )
+            return
+
+        output_path = self.mosaic_panel.get_output_path()
+        self.mosaic_panel.log_text.clear()
+        self.mosaic_panel.log("Starting mosaic build...")
+        self.mosaic_panel.build_btn.setEnabled(False)
+        self.frame_status_bar.set_status("Building mosaic...")
+
+        self._mosaic_thread, self._mosaic_worker = create_mosaic_thread(
+            paths, output_path
+        )
+        self._mosaic_worker.status_update.connect(self.mosaic_panel.log)
+        self._mosaic_worker.finished.connect(self._on_mosaic_finished)
+        self._mosaic_worker.error.connect(self._on_mosaic_error)
+        self._mosaic_thread.finished.connect(self._on_mosaic_thread_done)
+        self._mosaic_thread.start()
+
+    def _on_mosaic_finished(self, result):
+        self.mosaic_panel.log("Mosaic complete!")
+        self.preview_panel.show_data(result, info="Mosaic Result")
+        self.histogram_panel.set_data(result)
+        self.frame_status_bar.set_status("Mosaic complete")
+        play_success()
+
+    def _on_mosaic_error(self, message: str):
+        self.mosaic_panel.log(f"ERROR: {message}")
+        self.frame_status_bar.set_status("Mosaic failed")
+        play_error()
+        QMessageBox.critical(self, "Mosaic Error", message)
+
+    def _on_mosaic_thread_done(self):
+        self._mosaic_worker = None
+        self._mosaic_thread = None
+        self.mosaic_panel.build_btn.setEnabled(True)
