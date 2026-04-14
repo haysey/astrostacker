@@ -148,7 +148,7 @@ def generate_background_pixmap(width: int, height: int) -> QPixmap:
         painter.setCompositionMode(
             QPainter.CompositionMode.CompositionMode_SourceOver
         )
-        painter.setOpacity(0.40)
+        painter.setOpacity(1.0)
         painter.drawPixmap(lx, ly, logo)
         painter.setOpacity(1.0)
 
