@@ -25,8 +25,8 @@ from astrostacker.gui.background import generate_background_pixmap
 from astrostacker.gui.blink_dialog import BlinkDialog
 from astrostacker.gui.file_panel import FilePanel
 from astrostacker.gui.fits_header_dialog import FitsHeaderDialog, read_fits_header
+from astrostacker.gui.frame_status_bar import FrameStatusBar
 from astrostacker.gui.histogram_panel import HistogramPanel
-from astrostacker.gui.news_ticker import NewsTicker
 from astrostacker.gui.platesolve_panel import PlateSolvePanel
 from astrostacker.gui.preview_panel import PreviewPanel
 from astrostacker.gui.progress_panel import ProgressPanel
@@ -519,9 +519,10 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(h_splitter)
 
-        # News ticker at the bottom
-        self.news_ticker = NewsTicker()
-        main_layout.addWidget(self.news_ticker)
+        # Frame status bar at the bottom
+        self.frame_status_bar = FrameStatusBar()
+        self.frame_status_bar.set_version(APP_VERSION)
+        main_layout.addWidget(self.frame_status_bar)
 
     def _setup_menu_bar(self):
         menu_bar = self.menuBar()
@@ -615,6 +616,8 @@ class MainWindow(QMainWindow):
 
         self.progress_panel.reset()
         self.progress_panel.set_running(True)
+        self.frame_status_bar.clear()
+        self.frame_status_bar.set_status("Processing...")
         self.progress_panel.log(f"Starting pipeline with {len(light_paths)} light frames...")
 
         self._thread, self._worker = create_worker_thread(config)
@@ -637,6 +640,13 @@ class MainWindow(QMainWindow):
         self.progress_panel.set_progress(100, 100, "Stacking done")
         self.preview_panel.show_data(result, info="Stacked Result")
         self.histogram_panel.set_data(result)
+
+        # Update frame status bar with rejection info
+        total = len(self.file_panel.get_light_paths())
+        rejected = self._worker.pipeline.rejected_paths if self._worker else []
+        accepted = self._worker.pipeline.accepted_count if self._worker else total
+        self.frame_status_bar.set_status("Stacking complete")
+        self.frame_status_bar.set_frame_counts(total, accepted, rejected)
 
         # Embed WCS from a previous plate solve if available
         self._embed_existing_wcs()
@@ -746,6 +756,7 @@ class MainWindow(QMainWindow):
 
     def _on_error(self, message: str):
         self.progress_panel.log(f"ERROR: {message}")
+        self.frame_status_bar.set_status("Error")
         play_error()
         QMessageBox.critical(self, "Pipeline Error", message)
 

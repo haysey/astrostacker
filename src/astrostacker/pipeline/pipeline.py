@@ -69,6 +69,9 @@ class Pipeline:
         self.cancelled = False
         self._status_callback: Callable[[str], None] | None = None
         self._progress_callback: Callable[[int, int, str], None] | None = None
+        # Populated after run() — paths of rejected light frames
+        self.rejected_paths: list[str] = []
+        self.accepted_count: int = 0
 
     def set_callbacks(
         self,
@@ -190,27 +193,30 @@ class Pipeline:
             self._report("Camera set to Mono — skipping debayer")
 
         # Stage 2b: Auto frame rejection
+        self.rejected_paths = []
         if self.config.auto_reject and len(calibrated) >= 3:
             self._report("Scoring frame quality (star sharpness)...")
             scores = score_frames(calibrated, self.config.rejection_sigma)
             kept = []
-            rejected_count = 0
             for idx, hfr, keep in scores:
                 if keep:
                     kept.append(calibrated[idx])
                     self._report(f"  Frame {idx}: HFR={hfr:.2f}px — kept")
                 else:
-                    rejected_count += 1
+                    self.rejected_paths.append(self.config.light_paths[idx])
                     self._report(f"  Frame {idx}: HFR={hfr:.2f}px — REJECTED")
             if len(kept) >= 2:
                 self._report(
                     f"Frame rejection: kept {len(kept)}/{len(calibrated)}, "
-                    f"rejected {rejected_count}"
+                    f"rejected {len(self.rejected_paths)}"
                 )
                 calibrated = kept
             else:
                 self._report("Too few frames would remain — keeping all")
+                self.rejected_paths = []
             self._check_cancel()
+
+        self.accepted_count = len(calibrated)
 
         # Stage 3: Align calibrated frames
         self._report("Aligning frames...")
