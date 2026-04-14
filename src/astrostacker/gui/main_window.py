@@ -156,7 +156,7 @@ MACOS_STYLESHEET = """
         border-radius: 6px;
         padding: 5px 10px;
         font-size: 13px;
-        min-height: 22px;
+        min-height: 26px;
     }
     QComboBox:hover {
         background-color: rgba(255, 255, 255, 0.12);
@@ -189,7 +189,7 @@ MACOS_STYLESHEET = """
         border-radius: 6px;
         padding: 5px 8px;
         font-size: 13px;
-        min-height: 22px;
+        min-height: 26px;
     }
     QDoubleSpinBox:hover, QSpinBox:hover {
         background-color: rgba(255, 255, 255, 0.12);
@@ -220,15 +220,17 @@ MACOS_STYLESHEET = """
         background-color: rgba(15, 15, 25, 0.55);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 10px;
-        margin-top: 14px;
-        padding: 20px 12px 12px 12px;
+        margin-top: 18px;
+        padding: 28px 12px 12px 12px;
         font-weight: 600;
         color: rgba(255, 255, 255, 0.55);
         font-size: 11px;
     }
     QGroupBox::title {
         subcontrol-origin: margin;
+        subcontrol-position: top left;
         left: 14px;
+        top: 4px;
         padding: 0 6px;
         color: rgba(255, 255, 255, 0.55);
     }
@@ -319,6 +321,7 @@ MACOS_STYLESHEET = """
     QFormLayout QLabel {
         color: rgba(255, 255, 255, 0.7);
         font-size: 13px;
+        min-height: 26px;
     }
 
     /* ── Tabs ── */
@@ -344,6 +347,16 @@ MACOS_STYLESHEET = """
     }
     QTabBar::tab:hover:!selected {
         color: rgba(255, 255, 255, 0.7);
+    }
+
+    /* ── Checkboxes ── */
+    QCheckBox {
+        spacing: 8px;
+        min-height: 28px;
+    }
+    QCheckBox::indicator {
+        width: 18px;
+        height: 18px;
     }
 
     /* ── Tooltips ── */

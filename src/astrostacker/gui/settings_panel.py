@@ -51,8 +51,8 @@ class SettingsPanel(QWidget):
         # Camera type
         camera_group = QGroupBox("Camera")
         camera_layout = QFormLayout(camera_group)
-        camera_layout.setSpacing(10)
-        camera_layout.setContentsMargins(12, 20, 12, 12)
+        camera_layout.setSpacing(14)
+        camera_layout.setContentsMargins(12, 24, 12, 12)
 
         self.camera_combo = QComboBox()
         self.camera_combo.addItem("Mono", CAMERA_MONO)
@@ -82,8 +82,8 @@ class SettingsPanel(QWidget):
         # Stacking method
         method_group = QGroupBox("Stacking")
         method_layout = QFormLayout(method_group)
-        method_layout.setSpacing(10)
-        method_layout.setContentsMargins(12, 20, 12, 12)
+        method_layout.setSpacing(14)
+        method_layout.setContentsMargins(12, 24, 12, 12)
 
         self.method_combo = QComboBox()
         method_labels = {
@@ -131,8 +131,8 @@ class SettingsPanel(QWidget):
         # Alignment
         ref_group = QGroupBox("Alignment")
         ref_layout = QFormLayout(ref_group)
-        ref_layout.setSpacing(10)
-        ref_layout.setContentsMargins(12, 20, 12, 12)
+        ref_layout.setSpacing(14)
+        ref_layout.setContentsMargins(12, 24, 12, 12)
 
         self.reference_spin = QSpinBox()
         self.reference_spin.setMinimum(0)
@@ -144,7 +144,7 @@ class SettingsPanel(QWidget):
         # Output
         output_group = QGroupBox("Output")
         output_layout = QHBoxLayout(output_group)
-        output_layout.setContentsMargins(12, 20, 12, 12)
+        output_layout.setContentsMargins(12, 24, 12, 12)
         output_layout.setSpacing(8)
 
         self.output_path = QLineEdit("stacked.fits")
@@ -160,8 +160,8 @@ class SettingsPanel(QWidget):
         # Processing options
         proc_group = QGroupBox("Processing")
         proc_layout = QFormLayout(proc_group)
-        proc_layout.setSpacing(10)
-        proc_layout.setContentsMargins(12, 20, 12, 12)
+        proc_layout.setSpacing(14)
+        proc_layout.setContentsMargins(12, 24, 12, 12)
 
         self.auto_reject_check = QCheckBox("Auto-reject blurry frames")
         self.auto_reject_check.setToolTip(
