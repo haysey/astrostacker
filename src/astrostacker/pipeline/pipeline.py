@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -112,6 +113,17 @@ class Pipeline:
             raise ValueError("No light frames provided")
 
         self.cancelled = False
+
+        # Resolve relative output paths against the first light frame's
+        # directory.  Inside a macOS .app bundle the working directory is
+        # read-only, so bare names like "stacked.fits" would fail.
+        out = Path(self.config.output_path)
+        if not out.is_absolute():
+            lights_dir = Path(self.config.light_paths[0]).parent
+            out = lights_dir / out
+            self.config = dataclasses.replace(
+                self.config, output_path=str(out)
+            )
 
         # Stage 1: Build or load master calibration frames
         master_dark = None
