@@ -137,7 +137,7 @@ def generate_background_pixmap(width: int, height: int) -> QPixmap:
         logo_path = Path(getattr(sys, "_MEIPASS", ".")) / "icon.png"
     if logo_path.exists():
         logo = QPixmap(str(logo_path))
-        logo_size = int(min(width, height) * 0.45)
+        logo_size = int(min(width, height) * 0.55)
         logo = logo.scaled(
             logo_size, logo_size,
             Qt.AspectRatioMode.KeepAspectRatio,
@@ -148,7 +148,7 @@ def generate_background_pixmap(width: int, height: int) -> QPixmap:
         painter.setCompositionMode(
             QPainter.CompositionMode.CompositionMode_SourceOver
         )
-        painter.setOpacity(0.20)
+        painter.setOpacity(0.40)
         painter.drawPixmap(lx, ly, logo)
         painter.setOpacity(1.0)
 

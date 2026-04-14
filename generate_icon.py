@@ -232,46 +232,6 @@ def main():
 
     bg = Image.alpha_composite(bg, border_layer)
 
-    # === "H" monogram at bottom ===
-    text_layer = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-    text_draw = ImageDraw.Draw(text_layer)
-
-    # Try to use a nice font, fall back to default
-    font_size = 72
-    try:
-        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", font_size)
-    except (OSError, IOError):
-        try:
-            font = ImageFont.truetype("/System/Library/Fonts/SFNSDisplay.ttf", font_size)
-        except (OSError, IOError):
-            font = ImageFont.load_default()
-
-    text = "H"
-    bbox = text_draw.textbbox((0, 0), text, font=font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
-    tx = HALF - tw // 2
-    ty = SIZE - 140
-
-    # Text with subtle glow
-    for offset in range(8, 0, -1):
-        alpha = int(20 * (1 - offset / 8))
-        text_draw.text(
-            (tx, ty),
-            text,
-            font=font,
-            fill=(100, 160, 255, alpha),
-        )
-
-    text_draw.text(
-        (tx, ty),
-        text,
-        font=font,
-        fill=(180, 210, 255, 220),
-    )
-
-    bg = Image.alpha_composite(bg, text_layer)
-
     # === Apply circular mask ===
     # Create final image with black background outside circle
     final = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 255))
