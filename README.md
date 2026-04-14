@@ -59,10 +59,11 @@ Haysey's Astrostacker handles the entire workflow:
 - **Save As** — save the current preview image in FITS, XISF, PNG, or TIFF format
 
 ### General
+- **Frame status bar** — shows accepted/rejected frame counts after stacking, with option to delete rejected files from disk
 - **Audio notifications** — chime when processing completes, alert on errors
+- **Opens maximized** — automatically fills your screen at launch for best layout
 - **Apple Silicon optimised** — multi-core parallel processing on M1/M2/M3/M4 Macs
 - **FITS and XISF support** — reads and writes standard astro image formats
-- **Astronomy news ticker** — scrolling headlines from Space.com, Sky & Telescope, and SpaceNews
 - **Beautiful UI** — dark theme with procedural starfield background and Southern Cross logo
 
 ---
@@ -109,7 +110,13 @@ To download: go to **Actions** > click the latest successful run (green tick) > 
 
 1. Download and unzip `Hayseys-Astrostacker-Windows-x64.zip`
 2. Open the folder and double-click **Hayseys Astrostacker.exe**
-3. If Windows SmartScreen appears:
+3. **Windows Defender may block extraction or launch** — this is a false positive caused by the way the app is packaged (PyInstaller). The app is safe. To fix:
+   - Open **Settings** > **Privacy & Security** > **Windows Security**
+   - Click **Virus & threat protection** > **Manage settings**
+   - Scroll down to **Exclusions** > **Add or remove exclusions**
+   - Click **Add an exclusion** > **Folder** > select the folder where you extracted the zip
+   - Re-extract the zip and it should work fine
+4. If Windows SmartScreen appears on first launch:
    - Click **More info**
    - Click **Run anyway**
    - You only need to do this once.
