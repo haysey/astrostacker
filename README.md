@@ -21,7 +21,8 @@ Haysey's Astrostacker handles the entire workflow:
 7. **Crop** — auto-trim alignment edge artifacts
 8. **Gradient removal** — subtract light pollution gradients
 9. **Plate Solve** — identify exactly where in the sky your image points
-10. **Export** — save as FITS, TIFF, or PNG
+10. **Mosaic** — stitch multiple plate-solved panels into a wide-field image
+11. **Export** — save as FITS, TIFF, or PNG
 
 ---
 
@@ -48,6 +49,12 @@ Haysey's Astrostacker handles the entire workflow:
 - **WCS astrometry** — embeds World Coordinate System data for PixInsight SPCC and other tools
 - **Auto plate solve** — optionally plate solves automatically after stacking
 - **Annotated results** — view solved images with labelled deep-sky objects (Messier, NGC, IC, HD stars, etc.)
+
+### Mosaic Building
+- **WCS-based panel stitching** — combine multiple plate-solved FITS panels into a single wide-field image
+- **Automatic alignment** — uses astrometric coordinates (not star matching), so it works even on sparse or dissimilar fields
+- **Feathered blending** — smooth seamless transitions across overlapping regions
+- **Dedicated Mosaic tab** — runs on a background thread with live progress log
 
 ### Tools & Export
 - **Live histogram** — real-time pixel value distribution with min, max, mean, and median stats
@@ -205,6 +212,34 @@ Plate solving identifies exactly where your image points in the sky and which ob
 - Use **File > Export as TIFF** or **File > Export as PNG** for a stretched image ready to share
 - Use **Save As** in the preview toolbar for raw FITS or XISF data
 - Your stacked FITS file is also saved automatically to the output path
+
+---
+
+## Building a Mosaic
+
+A mosaic combines several overlapping panels (each a separate stack) into one wide-field image — great for large targets like the Milky Way core, the Andromeda galaxy, or the Heart & Soul nebulae that don't fit in a single frame.
+
+### How it works
+
+1. **Stack each panel separately first.** Point your scope at panel 1, capture your lights, stack them in AstroStacker as usual.
+2. **Plate solve each stacked panel.** Go to the Plate Solve tab and solve each stacked FITS file. This embeds the WCS astrometry that tells the mosaic engine exactly where each panel sits in the sky.
+3. **Repeat** for panels 2, 3, 4, etc. — with some overlap between adjacent panels (20-30% is ideal).
+
+### Building the mosaic
+
+1. Click the **Mosaic** tab in the sidebar
+2. Click **Add Panels** and select all your plate-solved stacked FITS files (2 or more)
+3. Set the **Output Path** — where to save the finished mosaic
+4. Click **Build Mosaic**
+5. Watch the log as panels are loaded, reprojected onto a common grid, and blended together
+6. The finished mosaic opens in the preview panel when complete
+
+### Tips for best mosaics
+
+- **Plate solving is required.** The mosaic engine uses the embedded WCS — a panel without astrometry can't be placed.
+- **Overlap matters.** Aim for 20-30% overlap between adjacent panels so the feathered blending has something to work with.
+- **Match exposures.** Try to use the same exposure time, gain, and processing for each panel so brightness matches.
+- **Stack and calibrate each panel first.** Don't mosaic raw subs — stack each panel to reduce noise, then mosaic the stacks.
 
 ---
 
