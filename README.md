@@ -1,6 +1,6 @@
 # Haysey's Astrostacker v0.2.0
 
-A free, easy-to-use astrophotography image stacking application for macOS and Windows. Built for members of the Astronomical Society of Victoria (ASV) and the wider amateur astronomy community.
+A free, easy-to-use astrophotography image stacking application for macOS, Windows, Linux, and Raspberry Pi. Built for members of the Astronomical Society of Victoria (ASV) and the wider amateur astronomy community.
 
 No coding or command-line experience required — just download, unzip, and run.
 
@@ -77,6 +77,8 @@ Download the latest version for your platform:
 | **Windows (64-bit)** | [Hayseys-Astrostacker-Windows-x64.zip](https://github.com/haysey/astrostacker/actions) |
 | **macOS (Apple Silicon)** | [Hayseys-Astrostacker-macOS-AppleSilicon.zip](https://github.com/haysey/astrostacker/actions) |
 | **macOS (Intel)** | [Hayseys-Astrostacker-macOS-Intel.zip](https://github.com/haysey/astrostacker/actions) |
+| **Linux (64-bit)** | [Hayseys-Astrostacker-Linux-x64.tar.gz](https://github.com/haysey/astrostacker/actions) |
+| **Raspberry Pi** | Run `install_rpi.sh` (see below) |
 
 To download: go to **Actions** > click the latest successful run (green tick) > scroll to **Artifacts** > download for your platform.
 
@@ -120,6 +122,42 @@ To download: go to **Actions** > click the latest successful run (green tick) > 
    - Click **More info**
    - Click **Run anyway**
    - You only need to do this once.
+
+#### Linux (Ubuntu, Debian, Mint)
+
+**Option A — Pre-built binary (easiest):**
+
+1. Download `Hayseys-Astrostacker-Linux-x64.tar.gz`
+2. Extract it: `tar -xzf Hayseys-Astrostacker-Linux-x64.tar.gz`
+3. Run it: `cd "Hayseys Astrostacker" && ./"Hayseys Astrostacker"`
+
+**Option B — Install from source (recommended for most users):**
+
+1. Open a terminal
+2. Download and run the installer:
+   ```
+   wget https://raw.githubusercontent.com/haysey/astrostacker/main/install_linux.sh
+   chmod +x install_linux.sh
+   ./install_linux.sh
+   ```
+3. The installer creates a desktop shortcut and adds the app to your applications menu
+4. To update later: `cd ~/astrostacker && git pull`
+
+#### Raspberry Pi (Pi 4, Pi 5 — 64-bit Raspberry Pi OS)
+
+Raspberry Pi uses a dedicated install script that installs Qt6 from the system and the rest via pip. This is faster and more reliable than a pre-built binary on ARM.
+
+1. Open a terminal on your Pi
+2. Download and run the installer:
+   ```
+   wget https://raw.githubusercontent.com/haysey/astrostacker/main/install_rpi.sh
+   chmod +x install_rpi.sh
+   ./install_rpi.sh
+   ```
+3. The installer handles everything — system packages, Python environment, desktop shortcut
+4. Launch from the desktop icon or run `~/astrostacker/run.sh`
+
+> **Pi performance note:** A Raspberry Pi 4 (4GB+) or Pi 5 will happily stack 20-30 frames at a time. Stacking is CPU-bound, so expect it to take longer than a desktop — but it works well for smaller batches. Drizzle and mosaic building will be slow on a Pi; disable drizzle for faster results.
 
 ---
 
@@ -247,7 +285,9 @@ TIFF and PNG exports have auto-stretch applied (PixInsight-style screen transfer
 |---|---------|-------------|
 | **macOS** | macOS 11 (Big Sur) | macOS 13+ (Ventura or later) |
 | **Windows** | Windows 10 (64-bit) | Windows 11 |
-| **RAM** | 8 GB | 16 GB+ |
+| **Linux** | Ubuntu 22.04 / Debian 12 / Mint 21 | Ubuntu 24.04+ |
+| **Raspberry Pi** | Pi 4 (4GB), 64-bit Raspberry Pi OS | Pi 5 (8GB), 64-bit Bookworm |
+| **RAM** | 8 GB (4 GB on Pi) | 16 GB+ |
 | **Storage** | 500 MB for the app | + space for your image files |
 
 ---

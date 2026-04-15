@@ -70,6 +70,57 @@ jobs:
           path: Hayseys-Astrostacker-macOS-AppleSilicon.zip
           retention-days: 90
 
+  build-linux-x64:
+    name: Linux x86_64 Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies (Qt6)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-glx \
+            libegl1 \
+            libxkbcommon0 \
+            libdbus-1-3 \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-keysyms1 \
+            libxcb-shape0 \
+            libxcb-render-util0 \
+            libxcb-xfixes0 \
+            libxcb-xinerama0 \
+            libxcb-xkb1 \
+            libxkbcommon-x11-0
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller astrostacker.spec --clean
+
+      - name: Package Linux app
+        run: |
+          cp README.md "dist/Hayseys Astrostacker/README.txt"
+          cd dist && tar -czf "../Hayseys-Astrostacker-Linux-x64.tar.gz" "Hayseys Astrostacker/"
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hayseys-Astrostacker-Linux-x64
+          path: Hayseys-Astrostacker-Linux-x64.tar.gz
+          retention-days: 90
+
   build-macos-intel:
     name: macOS Intel Build
     runs-on: macos-latest
