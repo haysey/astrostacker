@@ -6,6 +6,24 @@ No coding or command-line experience required — just download, unzip, and run.
 
 ---
 
+## What's New in v0.3.0
+
+A full visual polish pass to make the app feel more consistent and responsive:
+
+- **Orange focus rings** on all input fields so you can see where you're typing when tabbing between controls
+- **Icons on every secondary button** (Browse, Add, Remove, Clear, Save As, Master Dark/Flat) using native platform icons
+- **Card-style panels** with brighter borders and orange section titles
+- **Orange progress bar** and list selection highlights (was iOS blue) — consistent with the app's colour scheme
+- **Button press animation** — buttons visibly "dip" when clicked
+- **Animated status bar** — subtle pulsing dots while long operations run, so you know it's working
+- **Upgraded preview empty state** — friendly tip + orange ✦ icon when no image is loaded
+- **Thicker tab indicator** with hover highlight
+- Plus the usual bug fixes and a fix for the clipped "B" in Browse buttons on Windows / Linux
+
+No feature changes — everything you used in v0.2.0 works identically.
+
+---
+
 ## What Does It Do?
 
 Astrophotography images straight from the camera are noisy and faint. **Stacking** combines many exposures of the same target to dramatically reduce noise and reveal detail that no single frame can show.
