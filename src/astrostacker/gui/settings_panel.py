@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -163,7 +164,9 @@ class SettingsPanel(QWidget):
         output_layout.addWidget(self.output_path)
 
         browse_btn = QPushButton("Browse...")
-        browse_btn.setMinimumWidth(90)
+        browse_btn.setObjectName("secondaryButton")
+        browse_btn.setMinimumWidth(100)
+        browse_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
         browse_btn.clicked.connect(self._browse_output)
         output_layout.addWidget(browse_btn)
 

@@ -4,13 +4,25 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QPushButton,
     QWidget,
+)
+
+_IDLE_STATUS_STYLE = (
+    "color: rgba(255, 255, 255, 0.45);"
+    "font-size: 12px;"
+    "font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;"
+)
+_ACTIVE_STATUS_STYLE = (
+    "color: #ff9500;"
+    "font-size: 12px;"
+    "font-weight: 600;"
+    "font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;"
 )
 
 
@@ -20,6 +32,11 @@ class FrameStatusBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._rejected_paths: list[str] = []
+        self._spinner_base: str = ""
+        self._spinner_phase: int = 0
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.setInterval(400)
+        self._spinner_timer.timeout.connect(self._tick_spinner)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -36,11 +53,7 @@ class FrameStatusBar(QWidget):
         layout.setSpacing(20)
 
         self._status_label = QLabel("Ready")
-        self._status_label.setStyleSheet(
-            "color: rgba(255, 255, 255, 0.45);"
-            "font-size: 12px;"
-            "font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;"
-        )
+        self._status_label.setStyleSheet(_IDLE_STATUS_STYLE)
         layout.addWidget(self._status_label)
 
         layout.addStretch()
@@ -84,7 +97,44 @@ class FrameStatusBar(QWidget):
         self._version_label.setText(f"v{version}")
 
     def set_status(self, text: str):
-        self._status_label.setText(text)
+        """Update the status label.
+
+        If the text ends with an ellipsis ('...'), a pulsing dot animation
+        is started to signal a long-running operation. Any other text stops
+        the animation and returns to the muted idle style.
+        """
+        if text.endswith("..."):
+            # Strip trailing dots/whitespace — we supply animated dots ourselves
+            base = text.rstrip(".").rstrip()
+            self._start_spinner(base)
+        else:
+            self._stop_spinner()
+            self._status_label.setStyleSheet(_IDLE_STATUS_STYLE)
+            self._status_label.setText(text)
+
+    def _start_spinner(self, base: str):
+        self._spinner_base = base
+        self._spinner_phase = 0
+        self._status_label.setStyleSheet(_ACTIVE_STATUS_STYLE)
+        self._render_spinner()
+        if not self._spinner_timer.isActive():
+            self._spinner_timer.start()
+
+    def _stop_spinner(self):
+        if self._spinner_timer.isActive():
+            self._spinner_timer.stop()
+        self._spinner_base = ""
+        self._spinner_phase = 0
+
+    def _tick_spinner(self):
+        self._spinner_phase = (self._spinner_phase + 1) % 4
+        self._render_spinner()
+
+    def _render_spinner(self):
+        dots = "." * self._spinner_phase
+        pad = " " * (3 - self._spinner_phase)
+        # pad keeps the label width stable so surrounding widgets don't jitter
+        self._status_label.setText(f"{self._spinner_base}{dots}{pad}")
 
     def set_frame_counts(self, total: int, accepted: int, rejected_paths: list[str]):
         """Update the frame count display after pipeline completes."""
@@ -117,6 +167,8 @@ class FrameStatusBar(QWidget):
         self._frames_label.setText("")
         self._rejected_paths = []
         self._delete_btn.setVisible(False)
+        self._stop_spinner()
+        self._status_label.setStyleSheet(_IDLE_STATUS_STYLE)
         self._status_label.setText("Ready")
 
     def _on_delete_rejected(self):

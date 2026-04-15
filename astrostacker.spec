@@ -125,7 +125,7 @@ if sys.platform == 'darwin':
         icon='icon.icns',
         bundle_identifier='com.astrostacker.app',
         info_plist={
-            'CFBundleShortVersionString': '0.2.0',
+            'CFBundleShortVersionString': '0.3.0',
             'CFBundleName': "Haysey's Astrostacker",
             'NSHighResolutionCapable': True,
         },

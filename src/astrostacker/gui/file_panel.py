@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -51,18 +52,26 @@ class FrameListGroup(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(6)
 
+        style = self.style()
+
         self.add_btn = QPushButton("Add")
-        self.add_btn.setFixedHeight(26)
+        self.add_btn.setObjectName("secondaryButton")
+        self.add_btn.setFixedHeight(28)
+        self.add_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder))
         self.add_btn.clicked.connect(self._add_files)
         btn_layout.addWidget(self.add_btn)
 
         self.remove_btn = QPushButton("Remove")
-        self.remove_btn.setFixedHeight(26)
+        self.remove_btn.setObjectName("secondaryButton")
+        self.remove_btn.setFixedHeight(28)
+        self.remove_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogDiscardButton))
         self.remove_btn.clicked.connect(self._remove_selected)
         btn_layout.addWidget(self.remove_btn)
 
         self.clear_btn = QPushButton("Clear")
-        self.clear_btn.setFixedHeight(26)
+        self.clear_btn.setObjectName("secondaryButton")
+        self.clear_btn.setFixedHeight(28)
+        self.clear_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton))
         self.clear_btn.clicked.connect(self._clear_all)
         btn_layout.addWidget(self.clear_btn)
 
@@ -161,8 +170,13 @@ class FilePanel(QWidget):
         master_layout = QHBoxLayout()
         master_layout.setSpacing(6)
 
+        style = self.style()
+        folder_icon = style.standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon)
+
         self._master_dark_btn = QPushButton("Master Dark...")
-        self._master_dark_btn.setFixedHeight(26)
+        self._master_dark_btn.setObjectName("secondaryButton")
+        self._master_dark_btn.setFixedHeight(28)
+        self._master_dark_btn.setIcon(folder_icon)
         self._master_dark_btn.setToolTip(
             "Load a pre-built master dark FITS file.\n"
             "Overrides individual dark frames above."
@@ -171,7 +185,9 @@ class FilePanel(QWidget):
         master_layout.addWidget(self._master_dark_btn)
 
         self._master_flat_btn = QPushButton("Master Flat...")
-        self._master_flat_btn.setFixedHeight(26)
+        self._master_flat_btn.setObjectName("secondaryButton")
+        self._master_flat_btn.setFixedHeight(28)
+        self._master_flat_btn.setIcon(folder_icon)
         self._master_flat_btn.setToolTip(
             "Load a pre-built master flat FITS file.\n"
             "Overrides individual flat frames above."

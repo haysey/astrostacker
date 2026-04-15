@@ -1,4 +1,4 @@
-# Haysey's Astrostacker v0.2.0
+# Haysey's Astrostacker v0.3.0
 
 A free, easy-to-use astrophotography image stacking application for macOS, Windows, Linux, and Raspberry Pi. Built for members of the Astronomical Society of Victoria (ASV) and the wider amateur astronomy community.
 

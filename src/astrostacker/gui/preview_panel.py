@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -68,7 +69,11 @@ class PreviewPanel(QWidget):
         controls.addStretch()
 
         self.save_btn = QPushButton("Save As...")
-        self.save_btn.setFixedWidth(90)
+        self.save_btn.setObjectName("secondaryButton")
+        self.save_btn.setMinimumWidth(110)
+        self.save_btn.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton)
+        )
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(self._save_image)
         controls.addWidget(self.save_btn)
@@ -92,14 +97,21 @@ class PreviewPanel(QWidget):
 
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setText(
-            "No image loaded\n\n"
-            "Add light frames and click a file to preview,\n"
-            "or run the pipeline to see the stacked result."
+        self._empty_html = (
+            '<div style="text-align: center;">'
+            '<div style="font-size: 48px; color: rgba(255,149,0,0.35);'
+            ' margin-bottom: 20px;">✦</div>'
+            '<div style="color: rgba(255,255,255,0.60); font-size: 16px;'
+            ' font-weight: 600; margin-bottom: 14px;">No image loaded</div>'
+            '<div style="color: rgba(255,255,255,0.35); font-size: 13px;'
+            ' line-height: 1.6;">'
+            'Add light frames and click a file to preview,<br/>'
+            'or run the pipeline to see the stacked result.'
+            '</div>'
+            '</div>'
         )
-        self.image_label.setStyleSheet(
-            "color: rgba(255,255,255,0.25); font-size: 14px; font-weight: 400;"
-        )
+        self.image_label.setTextFormat(Qt.TextFormat.RichText)
+        self.image_label.setText(self._empty_html)
         self.scroll_area.setWidget(self.image_label)
 
         layout.addWidget(self.scroll_area)
@@ -197,5 +209,5 @@ class PreviewPanel(QWidget):
         self._current_pixmap = None
         self.save_btn.setEnabled(False)
         self.image_label.clear()
-        self.image_label.setText("No image loaded")
+        self.image_label.setText(self._empty_html)
         self.info_label.setText("")

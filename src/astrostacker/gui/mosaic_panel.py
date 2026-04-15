@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QStyle,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -66,18 +67,26 @@ class MosaicPanel(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(6)
 
+        style = self.style()
+
         self.add_btn = QPushButton("Add Panels")
-        self.add_btn.setFixedHeight(26)
+        self.add_btn.setObjectName("secondaryButton")
+        self.add_btn.setFixedHeight(28)
+        self.add_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder))
         self.add_btn.clicked.connect(self._add_panels)
         btn_layout.addWidget(self.add_btn)
 
         self.remove_btn = QPushButton("Remove")
-        self.remove_btn.setFixedHeight(26)
+        self.remove_btn.setObjectName("secondaryButton")
+        self.remove_btn.setFixedHeight(28)
+        self.remove_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogDiscardButton))
         self.remove_btn.clicked.connect(self._remove_selected)
         btn_layout.addWidget(self.remove_btn)
 
         self.clear_btn = QPushButton("Clear")
-        self.clear_btn.setFixedHeight(26)
+        self.clear_btn.setObjectName("secondaryButton")
+        self.clear_btn.setFixedHeight(28)
+        self.clear_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton))
         self.clear_btn.clicked.connect(self._clear_all)
         btn_layout.addWidget(self.clear_btn)
 
@@ -93,7 +102,9 @@ class MosaicPanel(QWidget):
         output_layout.addWidget(self.output_path)
 
         browse_btn = QPushButton("Browse...")
-        browse_btn.setMinimumWidth(90)
+        browse_btn.setObjectName("secondaryButton")
+        browse_btn.setMinimumWidth(100)
+        browse_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
         browse_btn.clicked.connect(self._browse_output)
         output_layout.addWidget(browse_btn)
 

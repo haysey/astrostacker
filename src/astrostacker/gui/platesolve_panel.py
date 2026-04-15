@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QStyle,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -88,7 +89,9 @@ class PlateSolvePanel(QWidget):
         image_layout.addWidget(self.image_path_input)
 
         browse_btn = QPushButton("Browse...")
-        browse_btn.setMinimumWidth(90)
+        browse_btn.setObjectName("secondaryButton")
+        browse_btn.setMinimumWidth(100)
+        browse_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
         browse_btn.clicked.connect(self._browse_image)
         image_layout.addWidget(browse_btn)
 

@@ -85,14 +85,14 @@ MACOS_STYLESHEET = """
         margin: 1px 2px;
     }
     QListWidget::item:selected {
-        background-color: rgba(0, 122, 255, 0.35);
+        background-color: rgba(255, 149, 0, 0.30);
         color: #ffffff;
     }
     QListWidget::item:hover:!selected {
         background-color: rgba(255, 255, 255, 0.06);
     }
 
-    /* ── Buttons ── */
+    /* ── Buttons (default = primary-filled orange) ── */
     QPushButton {
         background-color: #cc6600 !important;
         color: #ffffff !important;
@@ -107,10 +107,37 @@ MACOS_STYLESHEET = """
     }
     QPushButton:pressed {
         background-color: #a85500 !important;
+        padding-top: 6px;
+        padding-bottom: 4px;
     }
     QPushButton:disabled {
         color: rgba(255, 255, 255, 0.35) !important;
         background-color: rgba(204, 102, 0, 0.3) !important;
+    }
+
+    /* ── Secondary button (muted, for Add/Remove/Browse/etc) ── */
+    QPushButton#secondaryButton {
+        background-color: rgba(255, 255, 255, 0.06) !important;
+        color: #e5e5e5 !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-radius: 6px;
+        padding: 5px 14px;
+        font-size: 13px;
+        font-weight: 500;
+    }
+    QPushButton#secondaryButton:hover {
+        background-color: rgba(255, 149, 0, 0.12) !important;
+        border-color: rgba(255, 149, 0, 0.5) !important;
+        color: #ffb340 !important;
+    }
+    QPushButton#secondaryButton:pressed {
+        background-color: rgba(255, 149, 0, 0.20) !important;
+        padding-top: 6px;
+        padding-bottom: 4px;
+    }
+    QPushButton#secondaryButton:disabled {
+        color: rgba(255, 255, 255, 0.25) !important;
+        border-color: rgba(255, 255, 255, 0.08) !important;
     }
 
     /* ── Primary action button (Start Processing) ── */
@@ -131,6 +158,8 @@ MACOS_STYLESHEET = """
     QPushButton#primaryButton:pressed {
         background-color: rgba(255, 149, 0, 0.25) !important;
         border-color: #ff9500 !important;
+        padding-top: 11px;
+        padding-bottom: 9px;
     }
 
     /* ── Danger button (Cancel) ── */
@@ -155,13 +184,18 @@ MACOS_STYLESHEET = """
         background-color: rgba(255, 255, 255, 0.08);
         color: #e5e5e5;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 6px;
+        border-radius: 8px;
         padding: 5px 10px;
         font-size: 13px;
         min-height: 26px;
     }
     QComboBox:hover {
         background-color: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.20);
+    }
+    QComboBox:focus {
+        border: 1px solid #ff9500;
+        background-color: rgba(255, 149, 0, 0.06);
     }
     QComboBox::drop-down {
         border: none;
@@ -180,7 +214,7 @@ MACOS_STYLESHEET = """
         border: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 8px;
         padding: 4px;
-        selection-background-color: rgba(0, 122, 255, 0.35);
+        selection-background-color: rgba(255, 149, 0, 0.35);
     }
 
     /* ── Spin boxes ── */
@@ -188,13 +222,18 @@ MACOS_STYLESHEET = """
         background-color: rgba(255, 255, 255, 0.08);
         color: #e5e5e5;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 6px;
+        border-radius: 8px;
         padding: 5px 8px;
         font-size: 13px;
         min-height: 26px;
     }
     QDoubleSpinBox:hover, QSpinBox:hover {
         background-color: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.20);
+    }
+    QDoubleSpinBox:focus, QSpinBox:focus {
+        border: 1px solid #ff9500;
+        background-color: rgba(255, 149, 0, 0.06);
     }
     QDoubleSpinBox::up-button, QSpinBox::up-button,
     QDoubleSpinBox::down-button, QSpinBox::down-button {
@@ -207,25 +246,30 @@ MACOS_STYLESHEET = """
         background-color: rgba(255, 255, 255, 0.08);
         color: #e5e5e5;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 6px;
+        border-radius: 8px;
         padding: 5px 10px;
         font-size: 13px;
         min-height: 22px;
-        selection-background-color: rgba(0, 122, 255, 0.5);
+        selection-background-color: rgba(255, 149, 0, 0.5);
+    }
+    QLineEdit:hover {
+        border-color: rgba(255, 255, 255, 0.20);
     }
     QLineEdit:focus {
-        border-color: #0a84ff;
+        border: 1px solid #ff9500;
+        background-color: rgba(255, 149, 0, 0.06);
     }
 
-    /* ── Group boxes ── */
+    /* ── Group boxes (card-style) ── */
     QGroupBox {
-        background-color: rgba(15, 15, 25, 0.55);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background-color: rgba(22, 24, 34, 0.70);
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-top: 1px solid rgba(255, 255, 255, 0.15);
         border-radius: 10px;
         margin-top: 18px;
-        padding: 28px 12px 12px 12px;
-        font-weight: 600;
-        color: rgba(255, 255, 255, 0.55);
+        padding: 28px 14px 14px 14px;
+        font-weight: 700;
+        color: rgba(255, 255, 255, 0.70);
         font-size: 11px;
     }
     QGroupBox::title {
@@ -233,8 +277,9 @@ MACOS_STYLESHEET = """
         subcontrol-position: top left;
         left: 14px;
         top: 4px;
-        padding: 0 6px;
-        color: rgba(255, 255, 255, 0.55);
+        padding: 0 8px;
+        color: #ff9500;
+        letter-spacing: 0.5px;
     }
 
     /* ── Progress bar ── */
@@ -250,7 +295,7 @@ MACOS_STYLESHEET = """
     }
     QProgressBar::chunk {
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-            stop:0 #0a84ff, stop:1 #5ac8fa);
+            stop:0 #cc6600, stop:1 #ff9500);
         border-radius: 4px;
     }
 
@@ -263,7 +308,10 @@ MACOS_STYLESHEET = """
         padding: 8px;
         font-family: "SF Mono", "Menlo", "Monaco", monospace;
         font-size: 11px;
-        selection-background-color: rgba(0, 122, 255, 0.35);
+        selection-background-color: rgba(255, 149, 0, 0.35);
+    }
+    QTextEdit:focus {
+        border-color: rgba(255, 149, 0, 0.5);
     }
 
     /* ── Scroll bars ── */
@@ -338,17 +386,19 @@ MACOS_STYLESHEET = """
         background-color: transparent;
         color: rgba(255, 255, 255, 0.5);
         border: none;
-        padding: 8px 20px;
+        padding: 10px 22px 8px 22px;
         font-size: 13px;
         font-weight: 600;
-        border-bottom: 2px solid transparent;
+        border-bottom: 3px solid transparent;
     }
     QTabBar::tab:selected {
         color: #ff9500;
-        border-bottom: 2px solid #ff9500;
+        border-bottom: 3px solid #ff9500;
+        font-weight: 700;
     }
     QTabBar::tab:hover:!selected {
-        color: rgba(255, 255, 255, 0.7);
+        color: rgba(255, 255, 255, 0.8);
+        border-bottom: 3px solid rgba(255, 149, 0, 0.25);
     }
 
     /* ── Checkboxes ── */
