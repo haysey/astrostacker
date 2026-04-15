@@ -88,7 +88,7 @@ class PlateSolvePanel(QWidget):
         image_layout.addWidget(self.image_path_input)
 
         browse_btn = QPushButton("Browse...")
-        browse_btn.setFixedWidth(80)
+        browse_btn.setMinimumWidth(90)
         browse_btn.clicked.connect(self._browse_image)
         image_layout.addWidget(browse_btn)
 

@@ -163,7 +163,7 @@ class SettingsPanel(QWidget):
         output_layout.addWidget(self.output_path)
 
         browse_btn = QPushButton("Browse...")
-        browse_btn.setFixedWidth(80)
+        browse_btn.setMinimumWidth(90)
         browse_btn.clicked.connect(self._browse_output)
         output_layout.addWidget(browse_btn)
 
