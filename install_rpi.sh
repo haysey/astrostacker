@@ -83,8 +83,29 @@ fi
 echo ""
 echo "[3/5] Setting up Python environment..."
 
+# IMPORTANT: We MUST use system Python on Pi, because:
+#  1. python3-pyqt6 from apt is built for the system Python version
+#  2. PyQt6 has no PyPI wheels for ARM Linux, so pip-installing it
+#     would try to build from source (slow + often fails)
+# If user is in pyenv/conda, /usr/bin/python3 bypasses that.
+SYS_PY="/usr/bin/python3"
+if [ ! -x "$SYS_PY" ]; then
+    echo "ERROR: System Python not found at /usr/bin/python3"
+    echo "Install it with: sudo apt install python3"
+    exit 1
+fi
+
+# Verify system Python can import PyQt6 (sanity check apt install worked)
+if ! "$SYS_PY" -c "from PyQt6 import QtCore" 2>/dev/null; then
+    echo "ERROR: System Python can't import PyQt6."
+    echo "Re-run: sudo apt install python3-pyqt6"
+    exit 1
+fi
+
+echo "  Using system Python: $($SYS_PY --version)"
+
 # --system-site-packages lets us use the apt-installed PyQt6
-python3 -m venv --system-site-packages "$VENV_DIR"
+"$SYS_PY" -m venv --system-site-packages "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 
 pip install --upgrade pip -q
@@ -101,8 +122,9 @@ pip install \
     "requests>=2.28" \
     -q
 
-# Install the app itself
-pip install -e "$APP_DIR" -q
+# Install the app itself with --no-deps so pip doesn't try to
+# reinstall PyQt6 from PyPI (which would fail on ARM)
+pip install --no-deps -e "$APP_DIR" -q
 
 deactivate
 
