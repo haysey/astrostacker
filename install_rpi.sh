@@ -49,7 +49,8 @@ sudo apt-get install -y -qq \
     python3-dev \
     python3-pyqt6 \
     qt6-base-dev \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglx-mesa0 \
     libegl1 \
     libxkbcommon0 \
     libxcb-cursor0 \

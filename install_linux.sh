@@ -35,7 +35,8 @@ sudo apt-get install -y -qq \
     python3-venv \
     python3-dev \
     python3-pip \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglx-mesa0 \
     libegl1 \
     libxkbcommon0 \
     libdbus-1-3 \
