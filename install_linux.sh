@@ -46,6 +46,8 @@ sudo apt-get install -y -qq \
     libxcb-shape0 \
     libxcb-xinerama0 \
     libxkbcommon-x11-0 \
+    libfontconfig1 \
+    zlib1g \
     git
 
 # ── 2. Clone or update the repo ───────────────────────────

@@ -55,6 +55,7 @@ sudo apt-get install -y -qq \
     libxkbcommon0 \
     libxcb-cursor0 \
     libxcb-xinerama0 \
+    zlib1g \
     git \
     gfortran \
     libopenblas-dev \
