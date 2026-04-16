@@ -20,6 +20,7 @@ from astrostacker.stacking.stacker import stack_images
 from astrostacker.stacking.drizzle import drizzle_stack
 from astrostacker.utils.debayer import debayer
 from astrostacker.utils.frame_quality import score_frames
+from astrostacker.utils.denoise import denoise_image
 from astrostacker.utils.gradient import remove_gradient
 from astrostacker.utils.parallel import optimal_workers, parallel_load_images
 
@@ -62,6 +63,10 @@ class PipelineConfig:
     # Drizzle
     drizzle: bool = False
     drizzle_scale: int = 2
+
+    # Denoising
+    denoise: bool = False
+    denoise_strength: str = "medium"  # "light", "medium", "strong"
 
     # Auto-crop stacking edges
     auto_crop: bool = False
@@ -310,6 +315,14 @@ class Pipeline:
         if self.config.remove_gradient:
             self._report("Removing light pollution gradient...")
             result = remove_gradient(result)
+            self._check_cancel()
+
+        # Stage 4d: Denoising (Non-Local Means)
+        if self.config.denoise:
+            strength = self.config.denoise_strength
+            self._report(f"Denoising (Non-Local Means, {strength})...")
+            result = denoise_image(result, strength=strength)
+            self._report("Denoising complete")
             self._check_cancel()
 
         # Stage 5: Save

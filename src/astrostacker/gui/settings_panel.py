@@ -255,6 +255,36 @@ class SettingsPanel(QWidget):
         )
         proc_layout.addRow(self.auto_crop_check)
 
+        # Denoise row: checkbox + strength combo side by side
+        denoise_row = QHBoxLayout()
+        denoise_row.setSpacing(8)
+
+        self.denoise_check = QCheckBox("Denoise (Non-Local Means)")
+        self.denoise_check.setToolTip(
+            "Apply Non-Local Means denoising to the stacked result.\n"
+            "Smooths noisy background while preserving star profiles\n"
+            "and nebula structure. No model files or GPU required."
+        )
+        self.denoise_check.toggled.connect(self._on_denoise_toggled)
+        denoise_row.addWidget(self.denoise_check)
+
+        self.denoise_strength_combo = QComboBox()
+        self.denoise_strength_combo.addItem("Light", "light")
+        self.denoise_strength_combo.addItem("Medium", "medium")
+        self.denoise_strength_combo.addItem("Strong", "strong")
+        self.denoise_strength_combo.setCurrentIndex(1)  # Medium default
+        self.denoise_strength_combo.setFixedWidth(90)
+        self.denoise_strength_combo.setEnabled(False)
+        self.denoise_strength_combo.setToolTip(
+            "Light — subtle smoothing, safest for detail.\n"
+            "Medium — good balance (recommended).\n"
+            "Strong — aggressive, best for very noisy stacks."
+        )
+        denoise_row.addWidget(self.denoise_strength_combo)
+        denoise_row.addStretch()
+
+        proc_layout.addRow(denoise_row)
+
         self.drizzle_check = QCheckBox("Drizzle (2x resolution)")
         self.drizzle_check.setToolTip(
             "Use drizzle stacking to produce an image at 2x the native\n"
@@ -312,6 +342,9 @@ class SettingsPanel(QWidget):
         self._set_row_visible(self.pct_low_spin, show_pct)
         self._set_row_visible(self.pct_high_spin, show_pct)
 
+    def _on_denoise_toggled(self, checked: bool):
+        self.denoise_strength_combo.setEnabled(checked)
+
     # ── Browse ──
 
     def _browse_output(self):
@@ -367,6 +400,12 @@ class SettingsPanel(QWidget):
 
     def get_auto_crop(self) -> bool:
         return self.auto_crop_check.isChecked()
+
+    def get_denoise(self) -> bool:
+        return self.denoise_check.isChecked()
+
+    def get_denoise_strength(self) -> str:
+        return self.denoise_strength_combo.currentData()
 
     def get_drizzle(self) -> bool:
         return self.drizzle_check.isChecked()

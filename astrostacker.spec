@@ -42,6 +42,7 @@ hidden_imports = [
     'skimage.transform',
     'skimage.feature',
     'skimage.measure',
+    'skimage.restoration',
     # PyQt6
     'PyQt6.QtCore',
     'PyQt6.QtGui',

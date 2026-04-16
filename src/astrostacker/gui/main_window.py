@@ -685,6 +685,8 @@ class MainWindow(QMainWindow):
             auto_reject=self.settings_panel.get_auto_reject(),
             remove_gradient=self.settings_panel.get_remove_gradient(),
             local_normalise=self.settings_panel.get_local_normalise(),
+            denoise=self.settings_panel.get_denoise(),
+            denoise_strength=self.settings_panel.get_denoise_strength(),
             auto_crop=self.settings_panel.get_auto_crop(),
             drizzle=self.settings_panel.get_drizzle(),
         )
@@ -870,6 +872,8 @@ class MainWindow(QMainWindow):
             "auto_reject": self.settings_panel.get_auto_reject(),
             "remove_gradient": self.settings_panel.get_remove_gradient(),
             "local_normalise": self.settings_panel.get_local_normalise(),
+            "denoise": self.settings_panel.get_denoise(),
+            "denoise_strength": self.settings_panel.get_denoise_strength(),
             "auto_crop": self.settings_panel.get_auto_crop(),
             "drizzle": self.settings_panel.get_drizzle(),
             "auto_solve": self.settings_panel.get_auto_solve(),
@@ -949,6 +953,11 @@ class MainWindow(QMainWindow):
         self.settings_panel.auto_reject_check.setChecked(session.get("auto_reject", False))
         self.settings_panel.gradient_check.setChecked(session.get("remove_gradient", False))
         self.settings_panel.local_norm_check.setChecked(session.get("local_normalise", False))
+        self.settings_panel.denoise_check.setChecked(session.get("denoise", False))
+        strength = session.get("denoise_strength", "medium")
+        idx = self.settings_panel.denoise_strength_combo.findData(strength)
+        if idx >= 0:
+            self.settings_panel.denoise_strength_combo.setCurrentIndex(idx)
         self.settings_panel.auto_crop_check.setChecked(session.get("auto_crop", False))
         self.settings_panel.drizzle_check.setChecked(session.get("drizzle", False))
         self.settings_panel.auto_solve_check.setChecked(session.get("auto_solve", False))
