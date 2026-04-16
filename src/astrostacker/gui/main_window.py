@@ -688,7 +688,7 @@ class MainWindow(QMainWindow):
             denoise=self.settings_panel.get_denoise(),
             denoise_strength=self.settings_panel.get_denoise_strength(),
             deconvolve=self.settings_panel.get_deconvolve(),
-            deconv_iterations=self.settings_panel.get_deconv_iterations(),
+            deconv_strength=self.settings_panel.get_deconv_strength(),
             auto_crop=self.settings_panel.get_auto_crop(),
             drizzle=self.settings_panel.get_drizzle(),
         )
@@ -877,7 +877,7 @@ class MainWindow(QMainWindow):
             "denoise": self.settings_panel.get_denoise(),
             "denoise_strength": self.settings_panel.get_denoise_strength(),
             "deconvolve": self.settings_panel.get_deconvolve(),
-            "deconv_iterations": self.settings_panel.get_deconv_iterations(),
+            "deconv_strength": self.settings_panel.get_deconv_strength(),
             "auto_crop": self.settings_panel.get_auto_crop(),
             "drizzle": self.settings_panel.get_drizzle(),
             "auto_solve": self.settings_panel.get_auto_solve(),
@@ -963,7 +963,10 @@ class MainWindow(QMainWindow):
         if idx >= 0:
             self.settings_panel.denoise_strength_combo.setCurrentIndex(idx)
         self.settings_panel.deconv_check.setChecked(session.get("deconvolve", False))
-        self.settings_panel.deconv_iter_spin.setValue(session.get("deconv_iterations", 15))
+        deconv_str = session.get("deconv_strength", "medium")
+        idx = self.settings_panel.deconv_strength_combo.findData(deconv_str)
+        if idx >= 0:
+            self.settings_panel.deconv_strength_combo.setCurrentIndex(idx)
         self.settings_panel.auto_crop_check.setChecked(session.get("auto_crop", False))
         self.settings_panel.drizzle_check.setChecked(session.get("drizzle", False))
         self.settings_panel.auto_solve_check.setChecked(session.get("auto_solve", False))

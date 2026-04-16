@@ -23,7 +23,6 @@ from astrostacker.config import (
     CAMERA_COLOUR,
     CAMERA_MONO,
     DEFAULT_BAYER_PATTERN,
-    DEFAULT_DECONV_ITERATIONS,
     DEFAULT_PERCENTILE_HIGH,
     DEFAULT_PERCENTILE_LOW,
     DEFAULT_SIGMA_HIGH,
@@ -287,35 +286,36 @@ class SettingsPanel(QWidget):
 
         proc_layout.addRow(denoise_row)
 
-        # Deconvolution row: checkbox + iterations spinner side by side
-        deconv_row = QHBoxLayout()
-        deconv_row.setSpacing(12)
-        deconv_row.setContentsMargins(0, 0, 0, 0)
+        # Sharpen row: checkbox + strength combo side by side
+        sharpen_row = QHBoxLayout()
+        sharpen_row.setSpacing(12)
+        sharpen_row.setContentsMargins(0, 0, 0, 0)
 
         self.deconv_check = QCheckBox("Sharpen")
         self.deconv_check.setToolTip(
-            "Apply Richardson-Lucy deconvolution to sharpen the\n"
-            "stacked result using the measured star PSF.\n"
+            "Sharpen the stacked result using the measured star\n"
+            "profiles. Tightens stars and reveals fine detail.\n"
             "Works best on well-exposed stacks with good SNR."
         )
         self.deconv_check.toggled.connect(self._on_deconv_toggled)
-        deconv_row.addWidget(self.deconv_check)
+        sharpen_row.addWidget(self.deconv_check)
 
-        self.deconv_iter_spin = QSpinBox()
-        self.deconv_iter_spin.setRange(5, 50)
-        self.deconv_iter_spin.setValue(DEFAULT_DECONV_ITERATIONS)
-        self.deconv_iter_spin.setSuffix(" iter")
-        self.deconv_iter_spin.setMinimumWidth(100)
-        self.deconv_iter_spin.setEnabled(False)
-        self.deconv_iter_spin.setToolTip(
-            "Number of Richardson-Lucy iterations.\n"
-            "More iterations = sharper but risk amplifying noise.\n"
-            "10–20 is typically good."
+        self.deconv_strength_combo = QComboBox()
+        self.deconv_strength_combo.addItem("Light", "light")
+        self.deconv_strength_combo.addItem("Medium", "medium")
+        self.deconv_strength_combo.addItem("Strong", "strong")
+        self.deconv_strength_combo.setCurrentIndex(1)  # Medium default
+        self.deconv_strength_combo.setMinimumWidth(100)
+        self.deconv_strength_combo.setEnabled(False)
+        self.deconv_strength_combo.setToolTip(
+            "Light — subtle, safest for any stack.\n"
+            "Medium — good balance (recommended).\n"
+            "Strong — aggressive, best for high-SNR stacks."
         )
-        deconv_row.addWidget(self.deconv_iter_spin)
-        deconv_row.addStretch()
+        sharpen_row.addWidget(self.deconv_strength_combo)
+        sharpen_row.addStretch()
 
-        proc_layout.addRow(deconv_row)
+        proc_layout.addRow(sharpen_row)
 
         self.drizzle_check = QCheckBox("Drizzle (2x resolution)")
         self.drizzle_check.setToolTip(
@@ -378,7 +378,7 @@ class SettingsPanel(QWidget):
         self.denoise_strength_combo.setEnabled(checked)
 
     def _on_deconv_toggled(self, checked: bool):
-        self.deconv_iter_spin.setEnabled(checked)
+        self.deconv_strength_combo.setEnabled(checked)
 
     # ── Browse ──
 
@@ -445,8 +445,8 @@ class SettingsPanel(QWidget):
     def get_deconvolve(self) -> bool:
         return self.deconv_check.isChecked()
 
-    def get_deconv_iterations(self) -> int:
-        return self.deconv_iter_spin.value()
+    def get_deconv_strength(self) -> str:
+        return self.deconv_strength_combo.currentData()
 
     def get_drizzle(self) -> bool:
         return self.drizzle_check.isChecked()

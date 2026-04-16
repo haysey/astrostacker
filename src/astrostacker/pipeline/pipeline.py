@@ -72,7 +72,7 @@ class PipelineConfig:
 
     # Deconvolution (sharpening via Richardson-Lucy)
     deconvolve: bool = False
-    deconv_iterations: int = 15
+    deconv_strength: str = "medium"  # "light", "medium", "strong"
 
     # Auto-crop stacking edges
     auto_crop: bool = False
@@ -353,14 +353,15 @@ class Pipeline:
         # Stage 4d: Deconvolution (sharpening via Richardson-Lucy)
         if self.config.deconvolve:
             fwhm = self.measured_fwhm or 2.5  # fallback if not measured
-            iters = self.config.deconv_iterations
+            strength = self.config.deconv_strength
+            iters = {"light": 8, "medium": 15, "strong": 25}.get(strength, 15)
             self._report(
-                f"Sharpening (Richardson-Lucy deconvolution, "
+                f"Sharpening ({strength}, "
                 f"FWHM={fwhm:.2f}px, {iters} iterations)..."
             )
             kernel = build_moffat_kernel(fwhm)
             result = deconvolve_image(result, kernel, iterations=iters)
-            self._report("Deconvolution complete")
+            self._report("Sharpening complete")
             self._check_cancel()
 
         # Stage 4e: Denoising (Non-Local Means)
