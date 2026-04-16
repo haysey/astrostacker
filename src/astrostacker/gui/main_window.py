@@ -676,12 +676,15 @@ class MainWindow(QMainWindow):
             stacking_method=self.settings_panel.get_method(),
             sigma_low=self.settings_panel.get_sigma_low(),
             sigma_high=self.settings_panel.get_sigma_high(),
+            percentile_low=self.settings_panel.get_percentile_low(),
+            percentile_high=self.settings_panel.get_percentile_high(),
             camera_type=self.settings_panel.get_camera_type(),
             bayer_pattern=self.settings_panel.get_bayer_pattern(),
             output_path=self.settings_panel.get_output_path(),
             reference_frame=self.settings_panel.get_reference_frame(),
             auto_reject=self.settings_panel.get_auto_reject(),
             remove_gradient=self.settings_panel.get_remove_gradient(),
+            local_normalise=self.settings_panel.get_local_normalise(),
             auto_crop=self.settings_panel.get_auto_crop(),
             drizzle=self.settings_panel.get_drizzle(),
         )
@@ -858,12 +861,15 @@ class MainWindow(QMainWindow):
             "stacking_method": self.settings_panel.get_method(),
             "sigma_low": self.settings_panel.get_sigma_low(),
             "sigma_high": self.settings_panel.get_sigma_high(),
+            "percentile_low": self.settings_panel.get_percentile_low(),
+            "percentile_high": self.settings_panel.get_percentile_high(),
             "camera_type": self.settings_panel.get_camera_type(),
             "bayer_pattern": self.settings_panel.get_bayer_pattern(),
             "output_path": self.settings_panel.get_output_path(),
             "reference_frame": self.settings_panel.get_reference_frame(),
             "auto_reject": self.settings_panel.get_auto_reject(),
             "remove_gradient": self.settings_panel.get_remove_gradient(),
+            "local_normalise": self.settings_panel.get_local_normalise(),
             "auto_crop": self.settings_panel.get_auto_crop(),
             "drizzle": self.settings_panel.get_drizzle(),
             "auto_solve": self.settings_panel.get_auto_solve(),
@@ -925,6 +931,8 @@ class MainWindow(QMainWindow):
 
         self.settings_panel.sigma_low_spin.setValue(session.get("sigma_low", 2.5))
         self.settings_panel.sigma_high_spin.setValue(session.get("sigma_high", 2.5))
+        self.settings_panel.pct_low_spin.setValue(session.get("percentile_low", 10.0))
+        self.settings_panel.pct_high_spin.setValue(session.get("percentile_high", 10.0))
         self.settings_panel.output_path.setText(session.get("output_path", "stacked.fits"))
         self.settings_panel.reference_spin.setValue(session.get("reference_frame", 0))
 
@@ -940,6 +948,7 @@ class MainWindow(QMainWindow):
 
         self.settings_panel.auto_reject_check.setChecked(session.get("auto_reject", False))
         self.settings_panel.gradient_check.setChecked(session.get("remove_gradient", False))
+        self.settings_panel.local_norm_check.setChecked(session.get("local_normalise", False))
         self.settings_panel.auto_crop_check.setChecked(session.get("auto_crop", False))
         self.settings_panel.drizzle_check.setChecked(session.get("drizzle", False))
         self.settings_panel.auto_solve_check.setChecked(session.get("auto_solve", False))

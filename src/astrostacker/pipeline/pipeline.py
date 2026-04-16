@@ -37,9 +37,11 @@ class PipelineConfig:
     master_dark_path: str = ""
     master_flat_path: str = ""
 
-    stacking_method: str = "sigma_clip"
+    stacking_method: str = "median"
     sigma_low: float = 2.5
     sigma_high: float = 2.5
+    percentile_low: float = 10.0
+    percentile_high: float = 10.0
 
     camera_type: str = "mono"
     bayer_pattern: str = "RGGB"
@@ -53,6 +55,9 @@ class PipelineConfig:
 
     # Gradient removal
     remove_gradient: bool = False
+
+    # Local normalisation (per-frame gradient removal before stacking)
+    local_normalise: bool = False
 
     # Drizzle
     drizzle: bool = False
@@ -251,6 +256,14 @@ class Pipeline:
                 "Need at least 2 to stack."
             )
 
+        # Stage 3b: Local normalisation (per-frame gradient removal)
+        if self.config.local_normalise:
+            self._report("Local normalisation (per-frame gradient removal)...")
+            for i in range(len(aligned)):
+                aligned[i] = remove_gradient(aligned[i])
+            self._report("Local normalisation complete")
+            self._check_cancel()
+
         # Stage 4: Stack
         if self.config.drizzle:
             self._report(
@@ -262,10 +275,28 @@ class Pipeline:
             )
         else:
             self._report(f"Stacking {len(aligned)} frames ({self.config.stacking_method})...")
-            kwargs = {}
-            if self.config.stacking_method == "sigma_clip":
-                kwargs["sigma_low"] = self.config.sigma_low
-                kwargs["sigma_high"] = self.config.sigma_high
+
+            # Build kwargs relevant to the chosen stacking method.
+            # stacker.py filters out any that the method doesn't accept.
+            kwargs = {
+                "sigma_low": self.config.sigma_low,
+                "sigma_high": self.config.sigma_high,
+                "pct_low": self.config.percentile_low,
+                "pct_high": self.config.percentile_high,
+            }
+
+            # For weighted mean: compute quality weights from HFR scores
+            if self.config.stacking_method == "weighted_mean":
+                self._report("Computing frame quality weights (HFR)...")
+                scores = score_frames(aligned)
+                hfr_values = [hfr for _, hfr, _ in scores]
+                # Inverse-HFR weighting: sharper frames get more weight
+                weights = np.array([
+                    1.0 / max(h, 0.1) for h in hfr_values
+                ], dtype=np.float32)
+                kwargs["weights"] = weights
+                for i, (_, hfr, _) in enumerate(scores):
+                    self._report(f"  Frame {i}: HFR={hfr:.2f}px  weight={weights[i]:.3f}")
 
             result = stack_images(aligned, method=self.config.stacking_method, **kwargs)
         self._check_cancel()

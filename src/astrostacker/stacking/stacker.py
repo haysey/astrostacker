@@ -1,5 +1,7 @@
 """High-level stacking interface."""
 
+import inspect
+
 import numpy as np
 
 from astrostacker.stacking.methods import METHODS
@@ -7,16 +9,17 @@ from astrostacker.stacking.methods import METHODS
 
 def stack_images(
     images: list[np.ndarray],
-    method: str = "sigma_clip",
+    method: str = "median",
     **kwargs,
 ) -> np.ndarray:
     """Stack a list of aligned images using the specified method.
 
     Args:
         images: List of aligned float32 ndarrays, all same shape.
-        method: Stacking method name (mean, median, sigma_clip, min, max).
-        **kwargs: Extra arguments passed to the stacking function
-                  (e.g., sigma_low, sigma_high for sigma_clip).
+        method: Stacking method name (see METHODS registry).
+        **kwargs: Extra arguments forwarded to the stacking function.
+                  Only parameters that the chosen method accepts are
+                  passed through; the rest are silently ignored.
 
     Returns:
         Stacked result as float32 ndarray.
@@ -30,7 +33,11 @@ def stack_images(
     stack_3d = np.array(images, dtype=np.float32)
     method_fn = METHODS[method]
 
-    if method == "sigma_clip":
-        return method_fn(stack_3d, **kwargs)
-    else:
-        return method_fn(stack_3d)
+    # Only forward kwargs that the method's signature actually accepts,
+    # so callers can pass a superset without triggering TypeErrors.
+    sig = inspect.signature(method_fn)
+    valid_kwargs = {
+        k: v for k, v in kwargs.items()
+        if k in sig.parameters
+    }
+    return method_fn(stack_3d, **valid_kwargs)
