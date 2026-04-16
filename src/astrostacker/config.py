@@ -4,7 +4,7 @@ SUPPORTED_EXTENSIONS = (".fits", ".fit", ".fts", ".xisf")
 FILE_FILTER = "Astro Images (*.fits *.fit *.fts *.xisf);;FITS Files (*.fits *.fit *.fts);;XISF Files (*.xisf);;All Files (*)"
 
 STACKING_METHODS = ("mean", "median", "sigma_clip", "min", "max")
-DEFAULT_STACKING_METHOD = "sigma_clip"
+DEFAULT_STACKING_METHOD = "median"
 DEFAULT_SIGMA_LOW = 2.5
 DEFAULT_SIGMA_HIGH = 2.5
 DEFAULT_SIGMA_ITERS = 5
