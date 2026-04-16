@@ -183,8 +183,23 @@ class Pipeline:
         lights = parallel_load_images(self.config.light_paths, load_image)
         self._check_cancel()
 
-        # Pre-compute the safe flat divisor once (avoids repeat work per frame)
-        flat_div = prepare_flat_divisor(master_flat) if master_flat is not None else None
+        # Pre-compute the safe flat divisor once (avoids repeat work per frame).
+        # Pass the light frame shape so a mismatched flat is resized once,
+        # not on every frame.
+        light_shape = lights[0].shape
+        flat_div = (
+            prepare_flat_divisor(master_flat, target_shape=light_shape)
+            if master_flat is not None else None
+        )
+
+        # Also resize master dark once if dimensions differ
+        if master_dark is not None and master_dark.shape[:2] != light_shape[:2]:
+            from astrostacker.calibration.calibrate import _match_shape
+            self._report(
+                f"Master dark is {master_dark.shape[1]}×{master_dark.shape[0]} "
+                f"but lights are {light_shape[1]}×{light_shape[0]} — resizing to match"
+            )
+            master_dark = _match_shape(master_dark, light_shape, "dark")
 
         workers = optimal_workers(io_bound=False)
         n_frames = len(lights)
