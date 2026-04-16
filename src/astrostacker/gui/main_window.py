@@ -578,8 +578,10 @@ class MainWindow(QMainWindow):
         bottom_layout.addWidget(self.progress_panel)
 
         v_splitter.addWidget(bottom_widget)
-        v_splitter.setStretchFactor(0, 3)
-        v_splitter.setStretchFactor(1, 1)
+        # Give more room to Settings/Progress so all options are visible
+        # on startup without scrolling. Preview expands when an image loads.
+        v_splitter.setStretchFactor(0, 2)
+        v_splitter.setStretchFactor(1, 3)
 
         right_layout.addWidget(v_splitter)
         h_splitter.addWidget(right_widget)
