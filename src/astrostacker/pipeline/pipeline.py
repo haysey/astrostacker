@@ -19,12 +19,11 @@ from astrostacker.io.loader import load_image, save_image
 from astrostacker.stacking.stacker import stack_images
 from astrostacker.stacking.drizzle import drizzle_stack
 from astrostacker.utils.debayer import debayer
-from astrostacker.utils.deconvolution import deconvolve_image
+from astrostacker.utils.deconvolution import sharpen_image
 from astrostacker.utils.denoise import denoise_image
 from astrostacker.utils.frame_quality import score_frames
 from astrostacker.utils.gradient import remove_gradient
 from astrostacker.utils.parallel import optimal_workers, parallel_load_images
-from astrostacker.utils.psf import build_moffat_kernel
 
 
 @dataclass
@@ -365,7 +364,7 @@ class Pipeline:
             result = remove_gradient(result)
             self._check_cancel()
 
-        # Stage 4d: Deconvolution (damped Richardson-Lucy)
+        # Stage 4d: PSF-informed sharpening (unsharp mask)
         if self.config.deconvolve:
             fwhm = self.measured_fwhm or 2.5  # fallback if not measured
 
@@ -379,22 +378,10 @@ class Pipeline:
                 )
 
             strength = self.config.deconv_strength
-            # Gentle presets with damping to prevent ringing/dark halos
-            presets = {
-                "light":  (5,  0.65),
-                "medium": (8,  0.75),
-                "strong": (12, 0.85),
-            }
-            iters, damping = presets.get(strength, (8, 0.75))
             self._report(
-                f"Sharpening ({strength}, "
-                f"FWHM={fwhm:.2f}px, {iters} iterations, "
-                f"damping={damping})..."
+                f"Sharpening ({strength}, FWHM={fwhm:.2f}px)..."
             )
-            kernel = build_moffat_kernel(fwhm)
-            result = deconvolve_image(
-                result, kernel, iterations=iters, damping=damping,
-            )
+            result = sharpen_image(result, fwhm, strength=strength)
             self._report("Sharpening complete")
             self._check_cancel()
 
