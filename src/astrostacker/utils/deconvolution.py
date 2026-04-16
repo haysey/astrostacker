@@ -72,12 +72,16 @@ def _sharpen_mono(
 
     blurred = gaussian_filter(img, sigma=sigma)
 
-    # detail = original - blurred (the high-frequency component)
-    # sharpened = original + amount * detail
-    sharpened = img + amount * (img - blurred)
+    # Detail layer = original minus blurred.
+    # Only keep POSITIVE detail — this brightens fine structure
+    # (star cores, nebula filaments) without ever darkening anything.
+    # Standard unsharp mask uses both positive and negative detail,
+    # which dims star wings and creates visible dark rings when
+    # the image is auto-stretched.
+    detail = img - blurred
+    detail = np.maximum(detail, 0.0)       # positive-only
 
-    # Clamp to non-negative — no dark halos possible
-    sharpened = np.maximum(sharpened, 0.0)
+    sharpened = img + amount * detail
 
     return sharpened.astype(np.float32)
 
