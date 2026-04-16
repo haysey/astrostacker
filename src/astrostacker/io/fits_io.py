@@ -6,6 +6,31 @@ import numpy as np
 from astropy.io import fits
 
 
+def _read_data(path: str, memmap: bool) -> np.ndarray | None:
+    """Try to read image data from a FITS file.
+
+    Returns the raw data array, or None if no image data is found.
+    Raises on errors other than BZERO/BSCALE incompatibility.
+    """
+    try:
+        with fits.open(path, memmap=memmap) as hdul:
+            data = hdul[0].data
+            if data is None:
+                for hdu in hdul[1:]:
+                    if hdu.data is not None:
+                        data = hdu.data
+                        break
+            if data is not None:
+                # Force a read while the file handle is open
+                data = np.ascontiguousarray(data, dtype=np.float32)
+            return data
+    except ValueError as exc:
+        if "memmap" in str(exc).lower() and memmap:
+            # BZERO/BSCALE/BLANK present — caller should retry without memmap
+            return None
+        raise
+
+
 def read(path: str) -> np.ndarray:
     """Read a FITS file and return float32 ndarray.
 
@@ -13,31 +38,21 @@ def read(path: str) -> np.ndarray:
     FITS color images may store channels as NAXIS3 in (C, H, W) order;
     this function transposes them to channels-last (H, W, C).
     """
-    # memmap=True: data is memory-mapped from disk rather than loaded
-    # into a temporary buffer.  We convert to contiguous float32
-    # immediately below, so only one copy lives in RAM — halving
-    # peak memory per frame vs loading the full original dtype first.
-    with fits.open(path, memmap=True) as hdul:
-        data = hdul[0].data
-        if data is None:
-            # Try the first extension with data
-            for hdu in hdul[1:]:
-                if hdu.data is not None:
-                    data = hdu.data
-                    break
-        if data is None:
-            raise ValueError(f"No image data found in {path}")
+    # Try memmap first (halves peak RAM per frame), but fall back to
+    # non-memmap for FITS files with BZERO/BSCALE/BLANK scaling keywords
+    # — astropy cannot apply integer-to-float rescaling on mapped data.
+    data = _read_data(path, memmap=True)
+    if data is None:
+        data = _read_data(path, memmap=False)
+    if data is None:
+        raise ValueError(f"No image data found in {path}")
 
-        # FITS stores data as big-endian. Convert to native byte order
-        # float32 so downstream libraries (sep, scikit-image) work correctly.
-        data = np.ascontiguousarray(data, dtype=np.float32)
+    # FITS color images: (C, H, W) -> (H, W, C)
+    if data.ndim == 3 and data.shape[0] in (3, 4):
+        data = np.transpose(data, (1, 2, 0))
+        data = np.ascontiguousarray(data)
 
-        # FITS color images: (C, H, W) -> (H, W, C)
-        if data.ndim == 3 and data.shape[0] in (3, 4):
-            data = np.transpose(data, (1, 2, 0))
-            data = np.ascontiguousarray(data)
-
-        return data
+    return data
 
 
 def write(path: str, data: np.ndarray, header_extra: dict | None = None) -> None:
