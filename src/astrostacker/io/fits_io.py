@@ -13,7 +13,11 @@ def read(path: str) -> np.ndarray:
     FITS color images may store channels as NAXIS3 in (C, H, W) order;
     this function transposes them to channels-last (H, W, C).
     """
-    with fits.open(path, memmap=False) as hdul:
+    # memmap=True: data is memory-mapped from disk rather than loaded
+    # into a temporary buffer.  We convert to contiguous float32
+    # immediately below, so only one copy lives in RAM — halving
+    # peak memory per frame vs loading the full original dtype first.
+    with fits.open(path, memmap=True) as hdul:
         data = hdul[0].data
         if data is None:
             # Try the first extension with data

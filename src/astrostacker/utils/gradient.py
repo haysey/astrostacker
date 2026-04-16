@@ -44,8 +44,10 @@ def _fit_background_surface(data_2d: np.ndarray, grid_size: int = 8) -> np.ndarr
             if len(valid) == 0:
                 continue
 
-            # Use 25th percentile as sky estimate (below most stars)
-            sky = float(np.percentile(valid, 25))
+            # Use 25th percentile as sky estimate (below most stars).
+            # np.partition is O(n) vs np.percentile's O(n log n).
+            k25 = max(0, len(valid) // 4)
+            sky = float(np.partition(valid, k25)[k25])
 
             cy = (y0 + y1) / 2.0
             cx = (x0 + x1) / 2.0
@@ -123,7 +125,8 @@ def _remove_gradient_channel(channel: np.ndarray) -> np.ndarray:
     # Shift so minimum is at 0 (prevent negative values)
     valid = corrected[np.isfinite(corrected)]
     if len(valid) > 0:
-        corrected -= np.percentile(valid, 1)
+        k1 = max(0, len(valid) // 100)  # 1st percentile
+        corrected -= float(np.partition(valid, k1)[k1])
         corrected = np.clip(corrected, 0, None)
 
     return corrected.astype(np.float32)

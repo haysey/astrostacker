@@ -131,6 +131,8 @@ if sys.platform == 'darwin':
         },
     )
 elif sys.platform == 'win32':
+    # UPX disabled on Windows: decompression overhead slows startup,
+    # and compressed executables trigger antivirus false positives.
     exe = EXE(
         pyz,
         a.scripts,
@@ -140,7 +142,7 @@ elif sys.platform == 'win32':
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
-        upx=True,
+        upx=False,
         console=False,
         icon='icon.ico',
     )
@@ -149,7 +151,7 @@ elif sys.platform == 'win32':
         a.binaries,
         a.datas,
         strip=False,
-        upx=True,
+        upx=False,
         name='Hayseys Astrostacker',
     )
 else:

@@ -1,8 +1,9 @@
-"""Apple Silicon-aware parallel processing utilities.
+"""Cross-platform parallel processing utilities.
 
 Detects CPU core count and provides helpers for distributing work
-across performance cores. On Apple Silicon (M1-M5), uses the
-optimal number of workers based on performance core count.
+across available cores.  On Apple Silicon (M1-M5) targets the
+performance cores only; on Windows and Linux uses all cores minus
+one (leaving headroom for the GUI thread).
 """
 
 from __future__ import annotations

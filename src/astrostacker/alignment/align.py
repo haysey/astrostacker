@@ -80,23 +80,16 @@ _DETECTION_PROFILES = [
 
 
 def _normalise_for_alignment(data: np.ndarray) -> np.ndarray:
-    """Normalise image data for astroalign/sep compatibility.
+    """Normalise image data for astroalign compatibility.
 
-    sep (Source Extractor) requires:
-    - Native byte order (FITS files are big-endian, ARM Macs are little-endian)
-    - C-contiguous memory layout
-    - float32 or float64 dtype
-
-    Normalises to [0, 1] float64 range.
+    Produces a C-contiguous, native-byte-order float32 array in [0, 1].
+    float32 halves memory vs float64; source detection upscales internally
+    where it needs the extra precision.
     """
     # Clean non-finite values
     arr = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
-    # Force native byte order, float64, C-contiguous in one step
-    arr = np.array(arr, dtype=np.float64, order='C')
-    # Ensure native byte order explicitly
-    if arr.dtype.byteorder not in ('=', '|', '<' if np.little_endian else '>'):
-        arr = arr.byteswap().view(arr.dtype.newbyteorder('='))
-        arr = np.ascontiguousarray(arr)
+    # Force native byte order, float32, C-contiguous in one step
+    arr = np.array(arr, dtype=np.float32, order='C')
     # Normalise to [0, 1]
     lo = arr.min()
     hi = arr.max()
@@ -152,12 +145,14 @@ def _align_single_frame(args: tuple) -> tuple[int, np.ndarray | None, str]:
     """Align a single frame to the reference.
 
     Args:
-        args: Tuple of (index, frame, ref_lum, reference, is_color).
+        args: Tuple of (index, frame, ref_lum, ref_channels_norm, reference, is_color).
+              ref_channels_norm is a list of pre-normalised reference channels
+              (avoids re-normalising the same reference for every frame).
 
     Returns:
         Tuple of (original_index, aligned_frame_or_None, error_message).
     """
-    idx, frame, ref_lum, reference, is_color = args
+    idx, frame, ref_lum, ref_channels_norm, reference, is_color = args
 
     try:
         if is_color:
@@ -167,9 +162,8 @@ def _align_single_frame(args: tuple) -> tuple[int, np.ndarray | None, str]:
             channels = []
             for c in range(frame.shape[2]):
                 src_ch = _normalise_for_alignment(frame[:, :, c])
-                ref_ch = _normalise_for_alignment(reference[:, :, c])
                 registered, footprint = aa.apply_transform(
-                    transform, src_ch, ref_ch
+                    transform, src_ch, ref_channels_norm[c]
                 )
                 # Scale back to original range of this channel
                 ch_lo = np.nanmin(frame[:, :, c])
@@ -230,8 +224,15 @@ def align_frames(
 
     if is_color:
         ref_lum = _normalise_for_alignment(np.mean(reference, axis=2))
+        # Pre-normalise reference channels once — avoids recomputing
+        # the same normalisation for every frame × channel.
+        ref_channels_norm = [
+            _normalise_for_alignment(reference[:, :, c])
+            for c in range(reference.shape[2])
+        ]
     else:
         ref_lum = _normalise_for_alignment(reference)
+        ref_channels_norm = []
 
     total = len(frames)
 
@@ -239,7 +240,7 @@ def align_frames(
     work_items = []
     for i, frame in enumerate(frames):
         if i != reference_index:
-            work_items.append((i, frame, ref_lum, reference, is_color))
+            work_items.append((i, frame, ref_lum, ref_channels_norm, reference, is_color))
 
     workers = min(optimal_workers(io_bound=False), len(work_items)) if work_items else 1
 
