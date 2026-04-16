@@ -201,7 +201,8 @@ Raspberry Pi uses a dedicated install script that installs Qt6 from the system a
 
 #### 1. Load Your Images
 
-- Click **Add** under Light Frames and select your light frames (FITS or XISF)
+- Click **Add** under Light Frames and select your light frames (FITS or XISF), or use **Add Folder** to import an entire directory
+- You can also **drag and drop** files or folders directly onto any frame list
 - Optionally add **Darks**, **Flats**, and **Dark Flats** for calibration
 - OR click **Master Dark...** / **Master Flat...** to load pre-built master frames
 - The more light frames you add, the better your result will be
