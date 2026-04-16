@@ -365,17 +365,36 @@ class Pipeline:
             result = remove_gradient(result)
             self._check_cancel()
 
-        # Stage 4d: Deconvolution (sharpening via Richardson-Lucy)
+        # Stage 4d: Deconvolution (damped Richardson-Lucy)
         if self.config.deconvolve:
             fwhm = self.measured_fwhm or 2.5  # fallback if not measured
+
+            # If drizzle was used, the stacked image is 2x resolution
+            # so the effective FWHM in pixels is also 2x larger.
+            if self.config.drizzle:
+                fwhm *= self.config.drizzle_scale
+                self._report(
+                    f"Drizzle {self.config.drizzle_scale}x active — "
+                    f"scaled PSF FWHM to {fwhm:.2f}px"
+                )
+
             strength = self.config.deconv_strength
-            iters = {"light": 8, "medium": 15, "strong": 25}.get(strength, 15)
+            # Gentle presets with damping to prevent ringing/dark halos
+            presets = {
+                "light":  (5,  0.65),
+                "medium": (8,  0.75),
+                "strong": (12, 0.85),
+            }
+            iters, damping = presets.get(strength, (8, 0.75))
             self._report(
                 f"Sharpening ({strength}, "
-                f"FWHM={fwhm:.2f}px, {iters} iterations)..."
+                f"FWHM={fwhm:.2f}px, {iters} iterations, "
+                f"damping={damping})..."
             )
             kernel = build_moffat_kernel(fwhm)
-            result = deconvolve_image(result, kernel, iterations=iters)
+            result = deconvolve_image(
+                result, kernel, iterations=iters, damping=damping,
+            )
             self._report("Sharpening complete")
             self._check_cancel()
 
