@@ -229,15 +229,25 @@ class SettingsPanel(QWidget):
         outer.addWidget(scroll)
 
         self._on_method_changed()
+        self._on_camera_changed()
 
     def _on_camera_changed(self):
         is_colour = self.camera_combo.currentData() == CAMERA_COLOUR
-        self.bayer_combo.setEnabled(is_colour)
+        # Hide Bayer pattern entirely for mono cameras
+        self.bayer_combo.setVisible(is_colour)
+        label = self.bayer_combo.parent().layout().labelForField(self.bayer_combo)
+        if label is not None:
+            label.setVisible(is_colour)
 
     def _on_method_changed(self):
         is_sigma = self.get_method() == "sigma_clip"
-        self.sigma_low_spin.setEnabled(is_sigma)
-        self.sigma_high_spin.setEnabled(is_sigma)
+        # Hide sigma controls entirely when not using sigma clipping
+        for spin in (self.sigma_low_spin, self.sigma_high_spin):
+            spin.setVisible(is_sigma)
+            # Also hide the QFormLayout label for this row
+            label = spin.parent().layout().labelForField(spin)
+            if label is not None:
+                label.setVisible(is_sigma)
 
     def _browse_output(self):
         path, _ = QFileDialog.getSaveFileName(
