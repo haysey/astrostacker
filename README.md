@@ -8,19 +8,28 @@ No coding or command-line experience required — just download, unzip, and run.
 
 ## What's New in v0.3.0
 
-A full visual polish pass to make the app feel more consistent and responsive:
+New stacking methods, denoising, and a full visual polish pass:
 
-- **Orange focus rings** on all input fields so you can see where you're typing when tabbing between controls
-- **Icons on every secondary button** (Browse, Add, Remove, Clear, Save As, Master Dark/Flat) using native platform icons
-- **Card-style panels** with brighter borders and orange section titles
-- **Orange progress bar** and list selection highlights (was iOS blue) — consistent with the app's colour scheme
-- **Button press animation** — buttons visibly "dip" when clicked
-- **Animated status bar** — subtle pulsing dots while long operations run, so you know it's working
-- **Upgraded preview empty state** — friendly tip + orange ✦ icon when no image is loaded
-- **Thicker tab indicator** with hover highlight
-- Plus the usual bug fixes and a fix for the clipped "B" in Browse buttons on Windows / Linux
+**New stacking & processing:**
+- **5 new stacking methods** — Winsorized Sigma, Percentile Clipping, Weighted Mean (quality-based), Noise-Weighted Mean, plus the existing Mean, Median, Sigma Clip, Min, Max
+- **Non-Local Means denoising** — post-stack noise reduction with Light/Medium/Strong presets. Preserves star profiles and nebula structure while smoothing noisy backgrounds. No model files, no GPU required.
+- **Local normalisation** — per-frame gradient removal before stacking, so gradient differences between frames (moonrise, changing sky glow) don't contaminate the stack
+- **Percentile Clipping controls** — configurable low/high reject percentages when using Percentile Clipping
+- **Weighted Mean** — automatically scores each frame by star sharpness (HFR) and weights sharper frames higher
 
-No feature changes — everything you used in v0.2.0 works identically.
+**UX improvements:**
+- **Drag and drop** — drag files or folders directly onto the Light, Dark, Flat, and Dark Flat panels
+- **Folder import** — "Add Folder" option scans an entire directory for supported image files
+- **Smart settings** — Sigma parameters only appear when using Sigma Clipping/Winsorized Sigma; Bayer pattern only appears for Colour cameras
+- **Default stacking method** changed to Median — safest for beginners, advanced users can change as needed
+- **Improved startup layout** — all settings visible without scrolling on launch
+- **FITS compatibility fix** — handles BZERO/BSCALE scaled files that previously caused a crash
+- **Windows performance** — disabled UPX compression to avoid startup slowdown and antivirus false positives
+
+**Visual polish:**
+- Orange focus rings, card-style panels, animated status bar, button press animations
+- Icons on all secondary buttons, orange progress bar and selection highlights
+- Thicker tab indicator with hover highlight
 
 ---
 
@@ -48,7 +57,7 @@ Haysey's Astrostacker handles the entire workflow:
 
 ### Stacking & Calibration
 - **One-click stacking** — load your files, click Start, and you're done
-- **Multiple stacking methods** — Mean, Median, Sigma Clip, Min, Max
+- **9 stacking methods** — Mean, Median, Sigma Clip, Winsorized Sigma, Percentile Clip, Weighted Mean, Noise-Weighted Mean, Min, Max
 - **Drizzle stacking** — 2x resolution enhancement for well-dithered sub-exposures
 - **Calibration frames** — supports darks, flats, and dark flats
 - **Load pre-built masters** — load existing master dark and master flat FITS files to skip rebuilding them each session
@@ -60,6 +69,8 @@ Haysey's Astrostacker handles the entire workflow:
 ### Processing
 - **Auto frame rejection** — scores each frame by star sharpness (HFR) and rejects blurry or trailed frames before stacking
 - **Light pollution gradient removal** — fits and subtracts a smooth background surface to remove sky gradients from light pollution, moonlight, or vignetting
+- **Local normalisation** — per-frame gradient removal before stacking to prevent gradient drift between frames from contaminating the stack
+- **Non-Local Means denoising** — classical NLM noise reduction (Buades et al. 2005) with automatic noise estimation and Light/Medium/Strong presets. Preserves star profiles and nebula structure.
 - **Auto-crop** — trims the black/NaN borders left by frame alignment for a clean rectangular result
 
 ### Plate Solving
@@ -199,13 +210,15 @@ Raspberry Pi uses a dedicated install script that installs Qt6 from the system a
 
 - **Camera Type** — select Mono or Colour (Bayer)
 - **Bayer Pattern** — if using a colour camera, select your sensor's pattern (usually RGGB)
-- **Stacking Method** — Sigma Clip is recommended (rejects satellites, planes, hot pixels)
+- **Stacking Method** — Median is the default and safe for beginners. Sigma Clip is recommended for 15+ frames (rejects satellites, planes, hot pixels)
 - **Output Path** — where to save the stacked result
 
 #### 3. Processing Options (Optional)
 
 - **Auto-reject blurry frames** — tick this to automatically score and reject poor-quality frames
 - **Remove light pollution gradient** — great for suburban observing sites
+- **Local normalisation** — remove gradients from each frame individually before stacking (best for multi-hour sessions where sky brightness changes)
+- **Denoise (Non-Local Means)** — smooth noisy backgrounds while preserving detail. Choose Light, Medium, or Strong.
 - **Auto-crop stacking edges** — cleans up the black borders from alignment
 - **Drizzle (2x resolution)** — produces a higher-resolution output (best with dithered subs)
 
@@ -325,7 +338,9 @@ TIFF and PNG exports have auto-stretch applied (PixInsight-style screen transfer
 - **Save and reuse master frames.** The app saves master darks and flats automatically. Next session, load them with the Master Dark/Flat buttons instead of re-adding individual frames.
 - **Enable auto-reject** if you have more than a handful of subs. It catches the blurry ones you might miss.
 - **Use gradient removal** if you observe from suburban areas — it makes a big difference.
-- **Sigma Clip stacking** is recommended — it automatically rejects outliers like satellite trails and hot pixels.
+- **Median stacking** is the safe default. For 15+ frames, try **Sigma Clip** or **Winsorized Sigma** to reject satellite trails and hot pixels.
+- **Noise-Weighted stacking** is great if your subs have varying sky conditions — cleaner exposures contribute more.
+- **Denoise after stacking** with the Non-Local Means option — start with "Light" and increase if needed.
 - **Drizzle stacking** works best when your mount dithers between exposures. If you don't dither, standard stacking is better.
 - **Plate solve your results** to embed astrometry data. PixInsight's SPCC requires this for accurate colour calibration.
 - **Save sessions** before closing the app so you can reload your file lists and settings next time.
