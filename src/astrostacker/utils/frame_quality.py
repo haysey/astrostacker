@@ -1,124 +1,85 @@
-"""Frame quality scoring based on star sharpness (FWHM/HFR).
+"""Frame quality scoring via PSF (Point Spread Function) fitting.
 
-Detects stars using peak_local_max and estimates the Half-Flux Radius
-(HFR) for each star.  The median HFR across detected stars is the
-frame's quality score — lower is sharper.
+Detects stars and fits 2-D elliptical Gaussian profiles to measure
+accurate FWHM and eccentricity.  Frames are scored and optionally
+rejected based on both sharpness (FWHM) and elongation (eccentricity),
+catching blurry *and* trailed frames.
+
+Replaces the earlier simple HFR (Half-Flux Radius) approach with
+proper model-based PSF fitting for more reliable quality metrics.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
-from skimage.feature import peak_local_max
-from skimage.filters import gaussian
+
+from astrostacker.utils.psf import measure_frame_psf
 
 
-def _to_mono(data: np.ndarray) -> np.ndarray:
-    """Convert to 2-D mono by averaging colour channels."""
-    if data.ndim == 3:
-        return np.mean(data, axis=2)
-    return data
+@dataclass
+class FrameScore:
+    """Quality score for a single frame."""
 
-
-def estimate_hfr(data: np.ndarray, max_stars: int = 80) -> float:
-    """Estimate the median Half-Flux Radius of stars in an image.
-
-    Args:
-        data: 2-D float image (mono) or 3-D (H, W, C).
-        max_stars: Maximum number of brightest stars to measure.
-
-    Returns:
-        Median HFR in pixels.  Lower = sharper.
-        Returns float('inf') if no stars detected.
-    """
-    img = _to_mono(data).astype(np.float64)
-    img = np.nan_to_num(img, nan=0.0)
-    lo, hi = img.min(), img.max()
-    if hi <= lo:
-        return float("inf")
-    img = (img - lo) / (hi - lo)
-
-    smoothed = gaussian(img, sigma=1.5)
-    median = np.median(smoothed)
-    std = np.std(smoothed)
-    threshold = median + 3.0 * std
-
-    coords = peak_local_max(
-        smoothed,
-        min_distance=5,
-        threshold_abs=max(threshold, 0.02),
-        num_peaks=max_stars,
-    )
-
-    if len(coords) == 0:
-        return float("inf")
-
-    # Measure HFR for each detected star
-    h, w = img.shape
-    radius = 10  # measurement aperture radius in pixels
-    hfr_values = []
-
-    for row, col in coords:
-        r0 = max(0, row - radius)
-        r1 = min(h, row + radius + 1)
-        c0 = max(0, col - radius)
-        c1 = min(w, col + radius + 1)
-        stamp = img[r0:r1, c0:c1]
-
-        bg = np.percentile(stamp, 20)
-        stamp = stamp - bg
-        stamp = np.clip(stamp, 0, None)
-
-        total_flux = stamp.sum()
-        if total_flux <= 0:
-            continue
-
-        # Compute flux-weighted distance from centroid
-        yy, xx = np.mgrid[0:stamp.shape[0], 0:stamp.shape[1]]
-        cx = np.sum(xx * stamp) / total_flux
-        cy = np.sum(yy * stamp) / total_flux
-        dist = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
-        hfr = np.sum(dist * stamp) / total_flux
-        if 0.5 < hfr < radius:
-            hfr_values.append(hfr)
-
-    if not hfr_values:
-        return float("inf")
-
-    return float(np.median(hfr_values))
+    index: int
+    fwhm: float            # median FWHM in pixels (lower = sharper)
+    eccentricity: float    # median eccentricity (0 = round, 1 = line)
+    roundness: float       # minor/major axis ratio (1 = round)
+    n_stars: int           # number of stars successfully fitted
+    keep: bool             # whether this frame passes quality checks
 
 
 def score_frames(
     frames: list[np.ndarray],
     rejection_sigma: float = 2.0,
-) -> list[tuple[int, float, bool]]:
-    """Score and flag frames for rejection based on star sharpness.
+) -> list[FrameScore]:
+    """Score frames by PSF quality and flag outliers for rejection.
 
-    Frames with HFR more than ``rejection_sigma`` standard deviations
-    above the median are flagged for rejection (blurry / trailed).
+    Each frame's stars are fitted with elliptical 2-D Gaussians.
+    Frames whose median FWHM *or* eccentricity exceeds
+    ``rejection_sigma`` standard deviations above the population
+    median are flagged for rejection.
 
     Args:
-        frames: List of image arrays.
-        rejection_sigma: Sigma threshold for rejection.
+        frames: List of image arrays (2-D or 3-D).
+        rejection_sigma: Number of sigma for outlier rejection.
 
     Returns:
-        List of (index, hfr, keep) tuples sorted by index.
+        One :class:`FrameScore` per frame, in index order.
     """
-    scores = [(i, estimate_hfr(f)) for i, f in enumerate(frames)]
+    metrics = [measure_frame_psf(f) for f in frames]
 
-    finite = [s for _, s in scores if np.isfinite(s)]
-    if len(finite) < 3:
-        # Not enough data to reject — keep all
-        return [(i, hfr, True) for i, hfr in scores]
+    fwhms = np.array([m.fwhm for m in metrics])
+    eccs = np.array([m.eccentricity for m in metrics])
+    finite = np.isfinite(fwhms)
 
-    med = float(np.median(finite))
-    std = float(np.std(finite))
+    if np.sum(finite) < 3:
+        # Too few measured frames to compute statistics — keep all
+        return [
+            FrameScore(i, m.fwhm, m.eccentricity, m.roundness, m.n_stars, True)
+            for i, m in enumerate(metrics)
+        ]
 
-    if std < 1e-6:
-        return [(i, hfr, True) for i, hfr in scores]
+    # ── FWHM rejection ──
+    med_fwhm = float(np.median(fwhms[finite]))
+    std_fwhm = float(np.std(fwhms[finite]))
+    fwhm_thresh = med_fwhm + rejection_sigma * std_fwhm
 
-    threshold = med + rejection_sigma * std
+    # ── Eccentricity rejection (catches trailing / wind shake) ──
+    med_ecc = float(np.median(eccs[finite]))
+    std_ecc = float(np.std(eccs[finite]))
+    ecc_thresh = min(med_ecc + rejection_sigma * std_ecc, 0.8)
 
-    return [
-        (i, hfr, hfr <= threshold and np.isfinite(hfr))
-        for i, hfr in scores
-    ]
+    scores: list[FrameScore] = []
+    for i, m in enumerate(metrics):
+        keep = (
+            np.isfinite(m.fwhm)
+            and m.fwhm <= fwhm_thresh
+            and m.eccentricity <= ecc_thresh
+        )
+        scores.append(
+            FrameScore(i, m.fwhm, m.eccentricity, m.roundness, m.n_stars, keep)
+        )
+
+    return scores

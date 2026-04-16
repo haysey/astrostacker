@@ -23,6 +23,7 @@ from astrostacker.config import (
     CAMERA_COLOUR,
     CAMERA_MONO,
     DEFAULT_BAYER_PATTERN,
+    DEFAULT_DECONV_ITERATIONS,
     DEFAULT_PERCENTILE_HIGH,
     DEFAULT_PERCENTILE_LOW,
     DEFAULT_SIGMA_HIGH,
@@ -223,11 +224,11 @@ class SettingsPanel(QWidget):
         proc_layout.setSpacing(14)
         proc_layout.setContentsMargins(12, 24, 12, 12)
 
-        self.auto_reject_check = QCheckBox("Auto-reject blurry frames")
+        self.auto_reject_check = QCheckBox("Auto-reject blurry/trailed frames")
         self.auto_reject_check.setToolTip(
-            "Score each frame by star sharpness (HFR) and automatically\n"
-            "reject frames that are significantly blurrier than average.\n"
-            "Requires at least 3 light frames."
+            "Fits PSF profiles to stars in each frame and automatically\n"
+            "rejects frames with poor FWHM (blurry) or high eccentricity\n"
+            "(trailed/wind shake). Requires at least 3 light frames."
         )
         proc_layout.addRow(self.auto_reject_check)
 
@@ -285,6 +286,36 @@ class SettingsPanel(QWidget):
         denoise_row.addStretch()
 
         proc_layout.addRow(denoise_row)
+
+        # Deconvolution row: checkbox + iterations spinner side by side
+        deconv_row = QHBoxLayout()
+        deconv_row.setSpacing(12)
+        deconv_row.setContentsMargins(0, 0, 0, 0)
+
+        self.deconv_check = QCheckBox("Sharpen")
+        self.deconv_check.setToolTip(
+            "Apply Richardson-Lucy deconvolution to sharpen the\n"
+            "stacked result using the measured star PSF.\n"
+            "Works best on well-exposed stacks with good SNR."
+        )
+        self.deconv_check.toggled.connect(self._on_deconv_toggled)
+        deconv_row.addWidget(self.deconv_check)
+
+        self.deconv_iter_spin = QSpinBox()
+        self.deconv_iter_spin.setRange(5, 50)
+        self.deconv_iter_spin.setValue(DEFAULT_DECONV_ITERATIONS)
+        self.deconv_iter_spin.setSuffix(" iter")
+        self.deconv_iter_spin.setMinimumWidth(100)
+        self.deconv_iter_spin.setEnabled(False)
+        self.deconv_iter_spin.setToolTip(
+            "Number of Richardson-Lucy iterations.\n"
+            "More iterations = sharper but risk amplifying noise.\n"
+            "10–20 is typically good."
+        )
+        deconv_row.addWidget(self.deconv_iter_spin)
+        deconv_row.addStretch()
+
+        proc_layout.addRow(deconv_row)
 
         self.drizzle_check = QCheckBox("Drizzle (2x resolution)")
         self.drizzle_check.setToolTip(
@@ -345,6 +376,9 @@ class SettingsPanel(QWidget):
 
     def _on_denoise_toggled(self, checked: bool):
         self.denoise_strength_combo.setEnabled(checked)
+
+    def _on_deconv_toggled(self, checked: bool):
+        self.deconv_iter_spin.setEnabled(checked)
 
     # ── Browse ──
 
@@ -407,6 +441,12 @@ class SettingsPanel(QWidget):
 
     def get_denoise_strength(self) -> str:
         return self.denoise_strength_combo.currentData()
+
+    def get_deconvolve(self) -> bool:
+        return self.deconv_check.isChecked()
+
+    def get_deconv_iterations(self) -> int:
+        return self.deconv_iter_spin.value()
 
     def get_drizzle(self) -> bool:
         return self.drizzle_check.isChecked()

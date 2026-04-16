@@ -19,10 +19,12 @@ from astrostacker.io.loader import load_image, save_image
 from astrostacker.stacking.stacker import stack_images
 from astrostacker.stacking.drizzle import drizzle_stack
 from astrostacker.utils.debayer import debayer
-from astrostacker.utils.frame_quality import score_frames
+from astrostacker.utils.deconvolution import deconvolve_image
 from astrostacker.utils.denoise import denoise_image
+from astrostacker.utils.frame_quality import score_frames
 from astrostacker.utils.gradient import remove_gradient
 from astrostacker.utils.parallel import optimal_workers, parallel_load_images
+from astrostacker.utils.psf import build_moffat_kernel
 
 
 @dataclass
@@ -68,6 +70,10 @@ class PipelineConfig:
     denoise: bool = False
     denoise_strength: str = "medium"  # "light", "medium", "strong"
 
+    # Deconvolution (sharpening via Richardson-Lucy)
+    deconvolve: bool = False
+    deconv_iterations: int = 15
+
     # Auto-crop stacking edges
     auto_crop: bool = False
 
@@ -83,6 +89,8 @@ class Pipeline:
         # Populated after run() — paths of rejected light frames
         self.rejected_paths: list[str] = []
         self.accepted_count: int = 0
+        # Populated by PSF measurement — used for deconvolution kernel
+        self.measured_fwhm: float | None = None
 
     def set_callbacks(
         self,
@@ -214,19 +222,24 @@ class Pipeline:
         else:
             self._report("Camera set to Mono — skipping debayer")
 
-        # Stage 2b: Auto frame rejection
+        # Stage 2b: Auto frame rejection (PSF-based)
         self.rejected_paths = []
         if self.config.auto_reject and len(calibrated) >= 3:
-            self._report("Scoring frame quality (star sharpness)...")
+            self._report("Scoring frame quality (PSF fitting)...")
             scores = score_frames(calibrated, self.config.rejection_sigma)
             kept = []
-            for idx, hfr, keep in scores:
-                if keep:
-                    kept.append(calibrated[idx])
-                    self._report(f"  Frame {idx}: HFR={hfr:.2f}px — kept")
+            for s in scores:
+                label = (
+                    f"  Frame {s.index}: FWHM={s.fwhm:.2f}px  "
+                    f"Ecc={s.eccentricity:.2f}  Round={s.roundness:.2f}  "
+                    f"Stars={s.n_stars}"
+                )
+                if s.keep:
+                    kept.append(calibrated[s.index])
+                    self._report(f"{label} — kept")
                 else:
-                    self.rejected_paths.append(self.config.light_paths[idx])
-                    self._report(f"  Frame {idx}: HFR={hfr:.2f}px — REJECTED")
+                    self.rejected_paths.append(self.config.light_paths[s.index])
+                    self._report(f"{label} — REJECTED")
             if len(kept) >= 2:
                 self._report(
                     f"Frame rejection: kept {len(kept)}/{len(calibrated)}, "
@@ -290,18 +303,38 @@ class Pipeline:
                 "pct_high": self.config.percentile_high,
             }
 
-            # For weighted mean: compute quality weights from HFR scores
+            # Measure PSF if needed for weighted stacking or deconvolution
+            need_psf = (
+                self.config.stacking_method == "weighted_mean"
+                or self.config.deconvolve
+            )
+            if need_psf:
+                self._report("Measuring star PSF profiles...")
+                psf_scores = score_frames(aligned)
+                valid_fwhms = [
+                    s.fwhm for s in psf_scores if np.isfinite(s.fwhm)
+                ]
+                if valid_fwhms:
+                    self.measured_fwhm = float(np.median(valid_fwhms))
+                    self._report(
+                        f"Median PSF FWHM = {self.measured_fwhm:.2f}px "
+                        f"({len(valid_fwhms)} frames measured)"
+                    )
+
+            # For weighted mean: compute quality weights from PSF scores
             if self.config.stacking_method == "weighted_mean":
-                self._report("Computing frame quality weights (HFR)...")
-                scores = score_frames(aligned)
-                hfr_values = [hfr for _, hfr, _ in scores]
-                # Inverse-HFR weighting: sharper frames get more weight
+                # Combined weight: sharper AND rounder = higher weight
                 weights = np.array([
-                    1.0 / max(h, 0.1) for h in hfr_values
+                    (1.0 / max(s.fwhm, 0.1)) * s.roundness
+                    for s in psf_scores
                 ], dtype=np.float32)
                 kwargs["weights"] = weights
-                for i, (_, hfr, _) in enumerate(scores):
-                    self._report(f"  Frame {i}: HFR={hfr:.2f}px  weight={weights[i]:.3f}")
+                for s in psf_scores:
+                    w = weights[s.index]
+                    self._report(
+                        f"  Frame {s.index}: FWHM={s.fwhm:.2f}px  "
+                        f"Ecc={s.eccentricity:.2f}  weight={w:.3f}"
+                    )
 
             result = stack_images(aligned, method=self.config.stacking_method, **kwargs)
         self._check_cancel()
@@ -317,7 +350,20 @@ class Pipeline:
             result = remove_gradient(result)
             self._check_cancel()
 
-        # Stage 4d: Denoising (Non-Local Means)
+        # Stage 4d: Deconvolution (sharpening via Richardson-Lucy)
+        if self.config.deconvolve:
+            fwhm = self.measured_fwhm or 2.5  # fallback if not measured
+            iters = self.config.deconv_iterations
+            self._report(
+                f"Sharpening (Richardson-Lucy deconvolution, "
+                f"FWHM={fwhm:.2f}px, {iters} iterations)..."
+            )
+            kernel = build_moffat_kernel(fwhm)
+            result = deconvolve_image(result, kernel, iterations=iters)
+            self._report("Deconvolution complete")
+            self._check_cancel()
+
+        # Stage 4e: Denoising (Non-Local Means)
         if self.config.denoise:
             strength = self.config.denoise_strength
             self._report(f"Denoising (Non-Local Means, {strength})...")

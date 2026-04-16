@@ -36,6 +36,8 @@ hidden_imports = [
     'scipy.ndimage',
     'scipy.ndimage._interpolation',
     'scipy.optimize',
+    'scipy.signal',
+    'scipy.signal._fftlog',
     'scipy.spatial',
     # Scikit-image (used by astroalign)
     'skimage',

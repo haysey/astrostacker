@@ -11,11 +11,13 @@ No coding or command-line experience required — just download, unzip, and run.
 New stacking methods, denoising, and a full visual polish pass:
 
 **New stacking & processing:**
+- **PSF fitting** — proper 2D Gaussian star profile fitting replaces the old HFR measurement. Gives accurate FWHM, eccentricity, and roundness per frame. Frame rejection now catches both blurry AND trailed frames.
+- **Richardson-Lucy deconvolution** — sharpens the stacked result using the measured PSF. Reverses atmospheric blur and tracking error. Configurable iterations (5–50).
 - **5 new stacking methods** — Winsorized Sigma, Percentile Clipping, Weighted Mean (quality-based), Noise-Weighted Mean, plus the existing Mean, Median, Sigma Clip, Min, Max
 - **Non-Local Means denoising** — post-stack noise reduction with Light/Medium/Strong presets. Preserves star profiles and nebula structure while smoothing noisy backgrounds. No model files, no GPU required.
 - **Local normalisation** — per-frame gradient removal before stacking, so gradient differences between frames (moonrise, changing sky glow) don't contaminate the stack
 - **Percentile Clipping controls** — configurable low/high reject percentages when using Percentile Clipping
-- **Weighted Mean** — automatically scores each frame by star sharpness (HFR) and weights sharper frames higher
+- **Weighted Mean** — automatically scores each frame by PSF quality (FWHM + roundness) and weights sharper, rounder frames higher
 
 **UX improvements:**
 - **Drag and drop** — drag files or folders directly onto the Light, Dark, Flat, and Dark Flat panels
@@ -41,15 +43,17 @@ Haysey's Astrostacker handles the entire workflow:
 
 1. **Load** your light frames (and optional darks, flats, dark flats)
 2. **Calibrate** — subtract dark current and correct for vignetting/dust
-3. **Reject** — automatically discard blurry or trailed frames
+3. **Reject** — PSF-based scoring discards blurry and trailed frames
 4. **Debayer** — convert raw Bayer data to full colour (for colour cameras)
 5. **Align** — automatically register all frames to a reference star field
-6. **Stack** — combine aligned frames using your choice of method
+6. **Stack** — combine aligned frames using your choice of 9 methods
 7. **Crop** — auto-trim alignment edge artifacts
 8. **Gradient removal** — subtract light pollution gradients
-9. **Plate Solve** — identify exactly where in the sky your image points
-10. **Mosaic** — stitch multiple plate-solved panels into a wide-field image
-11. **Export** — save as FITS, TIFF, or PNG
+9. **Sharpen** — Richardson-Lucy deconvolution using the measured PSF
+10. **Denoise** — Non-Local Means noise reduction (Light/Medium/Strong)
+11. **Plate Solve** — identify exactly where in the sky your image points
+12. **Mosaic** — stitch multiple plate-solved panels into a wide-field image
+13. **Export** — save as FITS, TIFF, or PNG
 
 ---
 
@@ -67,7 +71,8 @@ Haysey's Astrostacker handles the entire workflow:
 - **Automatic frame alignment** — star-based registration using astroalign
 
 ### Processing
-- **Auto frame rejection** — scores each frame by star sharpness (HFR) and rejects blurry or trailed frames before stacking
+- **PSF-based frame rejection** — fits 2D Gaussian profiles to stars in each frame, measuring FWHM (sharpness) and eccentricity (elongation). Automatically rejects both blurry AND trailed frames.
+- **Richardson-Lucy deconvolution** — sharpens the stacked image using the measured star PSF. Reverses atmospheric seeing blur and tracking error. Configurable 5–50 iterations.
 - **Light pollution gradient removal** — fits and subtracts a smooth background surface to remove sky gradients from light pollution, moonlight, or vignetting
 - **Local normalisation** — per-frame gradient removal before stacking to prevent gradient drift between frames from contaminating the stack
 - **Non-Local Means denoising** — classical NLM noise reduction (Buades et al. 2005) with automatic noise estimation and Light/Medium/Strong presets. Preserves star profiles and nebula structure.
@@ -219,6 +224,7 @@ Raspberry Pi uses a dedicated install script that installs Qt6 from the system a
 - **Auto-reject blurry frames** — tick this to automatically score and reject poor-quality frames
 - **Remove light pollution gradient** — great for suburban observing sites
 - **Local normalisation** — remove gradients from each frame individually before stacking (best for multi-hour sessions where sky brightness changes)
+- **Sharpen (Deconvolution)** — Richardson-Lucy sharpening using the measured star PSF. 10–20 iterations is a good starting point.
 - **Denoise (Non-Local Means)** — smooth noisy backgrounds while preserving detail. Choose Light, Medium, or Strong.
 - **Auto-crop stacking edges** — cleans up the black borders from alignment
 - **Drizzle (2x resolution)** — produces a higher-resolution output (best with dithered subs)
@@ -337,11 +343,12 @@ TIFF and PNG exports have auto-stretch applied (PixInsight-style screen transfer
 - **Always take darks.** Dark frames at the same temperature and exposure as your lights dramatically reduce noise.
 - **Use flats if possible.** Flat frames correct for vignetting, dust spots, and uneven illumination.
 - **Save and reuse master frames.** The app saves master darks and flats automatically. Next session, load them with the Master Dark/Flat buttons instead of re-adding individual frames.
-- **Enable auto-reject** if you have more than a handful of subs. It catches the blurry ones you might miss.
+- **Enable auto-reject** if you have more than a handful of subs. PSF fitting catches both blurry AND trailed frames automatically.
 - **Use gradient removal** if you observe from suburban areas — it makes a big difference.
 - **Median stacking** is the safe default. For 15+ frames, try **Sigma Clip** or **Winsorized Sigma** to reject satellite trails and hot pixels.
 - **Noise-Weighted stacking** is great if your subs have varying sky conditions — cleaner exposures contribute more.
-- **Denoise after stacking** with the Non-Local Means option — start with "Light" and increase if needed.
+- **Try Sharpen (Deconvolution)** on well-exposed stacks — 10–20 iterations tightens star profiles and reveals fine detail. Best with good SNR.
+- **Denoise after stacking** with the Non-Local Means option — start with "Light" and increase if needed. Denoising runs after deconvolution, cleaning up any amplified noise.
 - **Drizzle stacking** works best when your mount dithers between exposures. If you don't dither, standard stacking is better.
 - **Plate solve your results** to embed astrometry data. PixInsight's SPCC requires this for accurate colour calibration.
 - **Save sessions** before closing the app so you can reload your file lists and settings next time.
