@@ -257,9 +257,10 @@ class SettingsPanel(QWidget):
 
         # Denoise row: checkbox + strength combo side by side
         denoise_row = QHBoxLayout()
-        denoise_row.setSpacing(8)
+        denoise_row.setSpacing(12)
+        denoise_row.setContentsMargins(0, 0, 0, 0)
 
-        self.denoise_check = QCheckBox("Denoise (Non-Local Means)")
+        self.denoise_check = QCheckBox("Denoise")
         self.denoise_check.setToolTip(
             "Apply Non-Local Means denoising to the stacked result.\n"
             "Smooths noisy background while preserving star profiles\n"
@@ -273,7 +274,7 @@ class SettingsPanel(QWidget):
         self.denoise_strength_combo.addItem("Medium", "medium")
         self.denoise_strength_combo.addItem("Strong", "strong")
         self.denoise_strength_combo.setCurrentIndex(1)  # Medium default
-        self.denoise_strength_combo.setFixedWidth(90)
+        self.denoise_strength_combo.setMinimumWidth(100)
         self.denoise_strength_combo.setEnabled(False)
         self.denoise_strength_combo.setToolTip(
             "Light — subtle smoothing, safest for detail.\n"
