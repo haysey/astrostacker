@@ -84,8 +84,8 @@ class SettingsPanel(QWidget):
         # Camera type
         camera_group = QGroupBox("Camera")
         camera_layout = QFormLayout(camera_group)
-        camera_layout.setSpacing(14)
-        camera_layout.setContentsMargins(12, 24, 12, 12)
+        camera_layout.setSpacing(10)
+        camera_layout.setContentsMargins(12, 20, 12, 8)
 
         self.camera_combo = QComboBox()
         self.camera_combo.addItem("Mono", CAMERA_MONO)
@@ -115,8 +115,8 @@ class SettingsPanel(QWidget):
         # Stacking method
         method_group = QGroupBox("Stacking")
         self._method_layout = QFormLayout(method_group)
-        self._method_layout.setSpacing(14)
-        self._method_layout.setContentsMargins(12, 24, 12, 12)
+        self._method_layout.setSpacing(10)
+        self._method_layout.setContentsMargins(12, 20, 12, 8)
 
         self.method_combo = QComboBox()
         for method in STACKING_METHODS:
@@ -189,8 +189,8 @@ class SettingsPanel(QWidget):
         # Alignment
         ref_group = QGroupBox("Alignment")
         ref_layout = QFormLayout(ref_group)
-        ref_layout.setSpacing(14)
-        ref_layout.setContentsMargins(12, 24, 12, 12)
+        ref_layout.setSpacing(10)
+        ref_layout.setContentsMargins(12, 20, 12, 8)
 
         self.reference_spin = QSpinBox()
         self.reference_spin.setMinimum(0)
@@ -202,7 +202,7 @@ class SettingsPanel(QWidget):
         # Output
         output_group = QGroupBox("Output")
         output_layout = QHBoxLayout(output_group)
-        output_layout.setContentsMargins(12, 24, 12, 12)
+        output_layout.setContentsMargins(12, 20, 12, 8)
         output_layout.setSpacing(8)
 
         self.output_path = QLineEdit("stacked.fits")
@@ -220,8 +220,8 @@ class SettingsPanel(QWidget):
         # Processing options
         proc_group = QGroupBox("Processing")
         proc_layout = QFormLayout(proc_group)
-        proc_layout.setSpacing(14)
-        proc_layout.setContentsMargins(12, 24, 12, 12)
+        proc_layout.setSpacing(10)
+        proc_layout.setContentsMargins(12, 20, 12, 8)
 
         self.auto_reject_check = QCheckBox("Auto-reject blurry/trailed frames")
         self.auto_reject_check.setToolTip(
@@ -325,20 +325,15 @@ class SettingsPanel(QWidget):
         )
         proc_layout.addRow(self.drizzle_check)
 
-        layout.addWidget(proc_group)
-
-        # Auto plate solve
         self.auto_solve_check = QCheckBox("Auto plate solve after stacking")
         self.auto_solve_check.setToolTip(
             "Automatically plate solve the stacked image and embed\n"
             "WCS astrometry data into the FITS file.\n"
             "Requires an API key in the Plate Solve tab."
         )
-        self.auto_solve_check.setStyleSheet(
-            "QCheckBox { color: rgba(255, 255, 255, 0.7); font-size: 12px; padding: 6px 2px; }"
-            "QCheckBox::indicator { width: 16px; height: 16px; }"
-        )
-        layout.addWidget(self.auto_solve_check)
+        proc_layout.addRow(self.auto_solve_check)
+
+        layout.addWidget(proc_group)
 
         layout.addStretch()
 

@@ -571,11 +571,10 @@ class MainWindow(QMainWindow):
 
         self.settings_panel = SettingsPanel()
         self.settings_panel.setMinimumWidth(300)
-        self.settings_panel.setMaximumWidth(380)
-        bottom_layout.addWidget(self.settings_panel)
+        bottom_layout.addWidget(self.settings_panel, stretch=2)
 
         self.progress_panel = ProgressPanel()
-        bottom_layout.addWidget(self.progress_panel)
+        bottom_layout.addWidget(self.progress_panel, stretch=3)
 
         v_splitter.addWidget(bottom_widget)
         # Give more room to Settings/Progress so all options are visible
