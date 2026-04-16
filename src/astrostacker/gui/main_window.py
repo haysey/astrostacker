@@ -411,6 +411,27 @@ MACOS_STYLESHEET = """
         height: 18px;
     }
 
+    /* ── Menus (Add button dropdown, etc) ── */
+    QMenu {
+        background-color: #2a2a2e;
+        color: #e5e5e5;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        padding: 4px;
+        font-size: 13px;
+    }
+    QMenu::item {
+        padding: 6px 16px 6px 10px;
+        border-radius: 5px;
+    }
+    QMenu::item:selected {
+        background-color: rgba(255, 149, 0, 0.30);
+        color: #ffffff;
+    }
+    QMenu::icon {
+        padding-left: 6px;
+    }
+
     /* ── Tooltips ── */
     QToolTip {
         background-color: #3a3a3c;

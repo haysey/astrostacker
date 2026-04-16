@@ -1,4 +1,7 @@
-"""Sidebar file panel with macOS-native styling."""
+"""Sidebar file panel with macOS-native styling.
+
+Supports drag-and-drop from the OS file manager and folder import.
+"""
 
 from pathlib import Path
 
@@ -9,13 +12,89 @@ from PyQt6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QPushButton,
     QStyle,
     QVBoxLayout,
     QWidget,
 )
 
-from astrostacker.config import FILE_FILTER
+from astrostacker.config import FILE_FILTER, SUPPORTED_EXTENSIONS
+
+
+def _collect_supported_files(paths: list[str]) -> list[str]:
+    """Given a mix of file and directory paths, return supported image files.
+
+    Directories are scanned one level deep (not recursive).
+    Individual files are kept if they have a supported extension.
+    Results are sorted alphabetically by filename.
+    """
+    result: list[str] = []
+    for p in paths:
+        path = Path(p)
+        if path.is_dir():
+            for child in sorted(path.iterdir()):
+                if child.is_file() and child.suffix.lower() in SUPPORTED_EXTENSIONS:
+                    result.append(str(child))
+        elif path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
+            result.append(str(path))
+    return result
+
+
+class DropListWidget(QListWidget):
+    """QListWidget that accepts file and folder drops from the OS.
+
+    Emits ``files_dropped`` with a list of resolved file paths
+    (folders are scanned for supported image extensions).
+    """
+
+    files_dropped = pyqtSignal(list)
+
+    _NORMAL_BORDER = ""
+    _HOVER_BORDER = (
+        "DropListWidget {"
+        "  border: 2px solid rgba(255, 149, 0, 0.6);"
+        "  border-radius: 6px;"
+        "}"
+    )
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.setDragDropMode(QListWidget.DragDropMode.DropOnly)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            self.setStyleSheet(self._HOVER_BORDER)
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event):
+        self.setStyleSheet(self._NORMAL_BORDER)
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event):
+        self.setStyleSheet(self._NORMAL_BORDER)
+        if event.mimeData().hasUrls():
+            raw_paths = []
+            for url in event.mimeData().urls():
+                local = url.toLocalFile()
+                if local:
+                    raw_paths.append(local)
+            if raw_paths:
+                resolved = _collect_supported_files(raw_paths)
+                if resolved:
+                    self.files_dropped.emit(resolved)
+            event.acceptProposedAction()
+        else:
+            super().dropEvent(event)
 
 
 class FrameListGroup(QWidget):
@@ -39,13 +118,13 @@ class FrameListGroup(QWidget):
         self._header.setObjectName("sectionHeader")
         layout.addWidget(self._header)
 
-        # File list
-        self.list_widget = QListWidget()
+        # File list (with drag-and-drop support)
+        self.list_widget = DropListWidget()
         self.list_widget.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self.list_widget.setAcceptDrops(True)
         self.list_widget.setMinimumHeight(60)
         self.list_widget.setMaximumHeight(140)
         self.list_widget.itemClicked.connect(self._on_item_clicked)
+        self.list_widget.files_dropped.connect(self._add_paths)
         layout.addWidget(self.list_widget)
 
         # Action buttons row
@@ -54,11 +133,28 @@ class FrameListGroup(QWidget):
 
         style = self.style()
 
+        # Add button with dropdown menu (Files / Folder)
         self.add_btn = QPushButton("Add")
         self.add_btn.setObjectName("secondaryButton")
         self.add_btn.setFixedHeight(28)
         self.add_btn.setIcon(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder))
-        self.add_btn.clicked.connect(self._add_files)
+        self.add_btn.setToolTip(
+            "Add image files or an entire folder.\n"
+            "You can also drag and drop files/folders onto the list."
+        )
+
+        add_menu = QMenu(self)
+        add_menu.addAction(
+            style.standardIcon(QStyle.StandardPixmap.SP_FileIcon),
+            "Add Files...",
+            self._add_files,
+        )
+        add_menu.addAction(
+            style.standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon),
+            "Add Folder...",
+            self._add_folder,
+        )
+        self.add_btn.setMenu(add_menu)
         btn_layout.addWidget(self.add_btn)
 
         self.remove_btn = QPushButton("Remove")
@@ -82,18 +178,41 @@ class FrameListGroup(QWidget):
         if path:
             self.file_selected.emit(path)
 
+    def _add_paths(self, paths: list[str]):
+        """Add a list of file paths to the list widget.
+
+        Shared by file dialog, folder dialog, and drag-and-drop.
+        Skips duplicates already in the list.
+        """
+        existing = set(self.get_paths())
+        added = 0
+        for path in paths:
+            if path not in existing:
+                item = QListWidgetItem(Path(path).name)
+                item.setData(Qt.ItemDataRole.UserRole, path)
+                item.setToolTip(path)
+                self.list_widget.addItem(item)
+                existing.add(path)
+                added += 1
+        if added:
+            self._update_header()
+            self.files_changed.emit()
+
     def _add_files(self):
         paths, _ = QFileDialog.getOpenFileNames(
             self, f"Add {self._base_title}", "", FILE_FILTER
         )
         if paths:
-            for path in paths:
-                item = QListWidgetItem(Path(path).name)
-                item.setData(Qt.ItemDataRole.UserRole, path)
-                item.setToolTip(path)
-                self.list_widget.addItem(item)
-            self._update_header()
-            self.files_changed.emit()
+            self._add_paths(paths)
+
+    def _add_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self, f"Add {self._base_title} from Folder"
+        )
+        if folder:
+            paths = _collect_supported_files([folder])
+            if paths:
+                self._add_paths(paths)
 
     def _remove_selected(self):
         for item in self.list_widget.selectedItems():
@@ -218,7 +337,7 @@ class FilePanel(QWidget):
         if path:
             self._master_dark_path = path
             self._master_dark_label.setText(f"Dark: {Path(path).name}")
-            self._master_dark_btn.setText("Master Dark ✓")
+            self._master_dark_btn.setText("Master Dark \u2713")
 
     def _load_master_flat(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -227,7 +346,7 @@ class FilePanel(QWidget):
         if path:
             self._master_flat_path = path
             self._master_flat_label.setText(f"Flat: {Path(path).name}")
-            self._master_flat_btn.setText("Master Flat ✓")
+            self._master_flat_btn.setText("Master Flat \u2713")
 
     def get_light_paths(self) -> list[str]:
         return self.lights.get_paths()
