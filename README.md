@@ -12,7 +12,7 @@ New stacking methods, denoising, and a full visual polish pass:
 
 **New stacking & processing:**
 - **PSF fitting** — proper 2D Gaussian star profile fitting replaces the old HFR measurement. Gives accurate FWHM, eccentricity, and roundness per frame. Frame rejection now catches both blurry AND trailed frames.
-- **Richardson-Lucy deconvolution** — sharpens the stacked result using the measured PSF. Reverses atmospheric blur and tracking error. Light/Medium/Strong presets.
+- **PSF-informed sharpening** — tightens star profiles and enhances fine detail using the measured star FWHM. Positive-only unsharp masking ensures nothing is ever darkened. Light/Medium/Strong presets.
 - **5 new stacking methods** — Winsorized Sigma, Percentile Clipping, Weighted Mean (quality-based), Noise-Weighted Mean, plus the existing Mean, Median, Sigma Clip, Min, Max
 - **Non-Local Means denoising** — post-stack noise reduction with Light/Medium/Strong presets. Preserves star profiles and nebula structure while smoothing noisy backgrounds. No model files, no GPU required.
 - **Local normalisation** — per-frame gradient removal before stacking, so gradient differences between frames (moonrise, changing sky glow) don't contaminate the stack
@@ -49,7 +49,7 @@ Haysey's Astrostacker handles the entire workflow:
 6. **Stack** — combine aligned frames using your choice of 9 methods
 7. **Crop** — auto-trim alignment edge artifacts
 8. **Gradient removal** — subtract light pollution gradients
-9. **Sharpen** — Richardson-Lucy deconvolution using the measured PSF
+9. **Sharpen** — PSF-informed sharpening (Light/Medium/Strong)
 10. **Denoise** — Non-Local Means noise reduction (Light/Medium/Strong)
 11. **Plate Solve** — identify exactly where in the sky your image points
 12. **Mosaic** — stitch multiple plate-solved panels into a wide-field image
@@ -72,7 +72,7 @@ Haysey's Astrostacker handles the entire workflow:
 
 ### Processing
 - **PSF-based frame rejection** — fits 2D Gaussian profiles to stars in each frame, measuring FWHM (sharpness) and eccentricity (elongation). Automatically rejects both blurry AND trailed frames.
-- **Richardson-Lucy deconvolution** — sharpens the stacked image using the measured star PSF. Reverses atmospheric seeing blur and tracking error. Light/Medium/Strong presets.
+- **PSF-informed sharpening** — tightens star profiles and enhances nebula detail using the measured star FWHM. Positive-only enhancement ensures nothing is ever darkened — no dark halos. Light/Medium/Strong presets.
 - **Light pollution gradient removal** — fits and subtracts a smooth background surface to remove sky gradients from light pollution, moonlight, or vignetting
 - **Local normalisation** — per-frame gradient removal before stacking to prevent gradient drift between frames from contaminating the stack
 - **Non-Local Means denoising** — classical NLM noise reduction (Buades et al. 2005) with automatic noise estimation and Light/Medium/Strong presets. Preserves star profiles and nebula structure.
