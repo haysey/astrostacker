@@ -394,7 +394,15 @@ When reporting a bug, please include:
 
 ## License
 
-This application is provided free of charge for personal use by members of the astronomical community.
+**© 2024 Andrew Hayes. All rights reserved.**
+
+Haysey's Astrostacker v0.3.0 and all subsequent versions are copyright Andrew Hayes.
+
+Free to download and use for personal, non-commercial astrophotography. Repackaging, redistribution, or commercial use of any kind requires prior written permission from the copyright holder.
+
+For licensing enquiries: **haysey@haysey.id.au**
+
+See the [LICENSE](LICENSE) file for full terms.
 
 ---
 
