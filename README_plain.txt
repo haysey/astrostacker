@@ -339,8 +339,16 @@ QUICK START GUIDE
 5. Plate Solve (Optional)
    - Go to the Plate Solve tab
    - Enter your Astrometry.net API key (see section below)
+   - Enter your telescope focal length and camera pixel size in the
+     FOV Calculator, then click "Calculate and Apply" -- this is strongly
+     recommended. Without it, solving can take 10+ minutes or fail.
+     See "Finding Your Telescope Focal Length and Camera Pixel Size" below.
    - Click Solve and wait for results
    - This embeds WCS data into your FITS file for tools like PixInsight
+
+   Note: if you tick "Auto plate solve after stacking" in Settings,
+   the scale hints you set in the Plate Solve tab are used automatically.
+   Set them up once in the Plate Solve tab before using auto plate solve.
 
 6. Export Your Result
    - Use File > Export as TIFF or File > Export as PNG for a stretched
@@ -389,6 +397,60 @@ How to get your free API key:
      this once
 
 Note: The key is stored locally on your computer and is never shared.
+
+
+------------------------------------------------------------------------
+FINDING YOUR TELESCOPE FOCAL LENGTH AND CAMERA PIXEL SIZE
+------------------------------------------------------------------------
+
+The Plate Solve tab has an FOV Calculator that dramatically speeds up
+plate solving. It needs just two numbers: your telescope focal length
+and your camera pixel size. You only need to enter these once -- the
+app remembers them every session.
+
+TELESCOPE FOCAL LENGTH (mm)
+  This is usually printed on the telescope tube or in the manual.
+  It is the number after "f=" on the tube label.
+
+  Examples:
+    - A Celestron 8" SCT at f/10 has a focal length of 2032 mm
+    - A common 80mm refractor "f/6" has 480 mm focal length
+    - A 200/1000 Newtonian has 1000 mm focal length (the second number)
+    - Focal reducers and Barlows change this -- use the effective value
+
+  If in doubt, search your telescope model name + "focal length" online.
+
+CAMERA PIXEL SIZE (micrometres, µm)
+  Every camera sensor has a different pixel size. Using the wrong value
+  (even another camera in the same brand range) will cause plate solving
+  to fail or time out. You must use YOUR camera's exact specification.
+
+  How to find it:
+    1. Check the manufacturer's product page or spec sheet for your
+       camera model. Search "[your camera model] specifications".
+
+    2. For ZWO ASI cameras: go to https://astronomy-imaging-camera.com,
+       find your camera model, and look for "Pixel Size" in the specs.
+       Examples: ASI294MC Pro = 4.63 µm, ASI183MC = 2.40 µm,
+       ASI1600MC = 3.80 µm, ASI533MC Pro = 3.76 µm.
+
+    3. For Canon or Nikon DSLRs: search "[camera model] pixel size".
+       Examples: Canon 600D/T3i = 4.30 µm, Canon 80D = 3.71 µm,
+       Nikon D5300 = 3.92 µm, Sony A7III = 5.95 µm.
+
+    4. In capture software (Sharpcap, NINA, KStars/Ekos): the camera
+       properties panel often displays the pixel size when your camera
+       is connected.
+
+    5. On the IDAS or Cloudy Nights forums, search your camera model --
+       pixel sizes are frequently listed in imaging reports.
+
+  Round to 2 decimal places. Common values range from 1.85 µm (small
+  sensors) to 9.0 µm (large-format cameras).
+
+Once entered, click "Calculate and Apply" and the app works out your
+image scale and sets the plate solver bounds automatically. You should
+only need to do this once unless you change cameras or telescopes.
 
 
 ------------------------------------------------------------------------
