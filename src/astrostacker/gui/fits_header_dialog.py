@@ -74,10 +74,11 @@ def read_fits_header(path: str) -> str:
         with fits.open(path) as hdul:
             header = hdul[0].header
             lines = []
-            for key in header.keys():
+            for card in header.cards:
+                key = card.keyword
                 if key and key.strip():
-                    val = header[key]
-                    comment = header.comments.get(key, "")
+                    val = card.value
+                    comment = card.comment or ""
                     if comment:
                         lines.append(f"{key:8s} = {val!r:>30s}  / {comment}")
                     else:
