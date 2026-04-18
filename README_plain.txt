@@ -480,7 +480,7 @@ REPORTING BUGS
 
 Found a bug or have a suggestion? Please email:
 
-  compute@asv.org.au
+  haysey@haysey.id.au
 
 When reporting a bug, please include:
   - What you were doing when it happened

@@ -28,16 +28,14 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller astrostacker.spec --clean
 
-      - name: Include README and zip
-        run: |
-          copy README_plain.txt "dist\Hayseys Astrostacker\README.txt"
-          Compress-Archive -Path "dist\Hayseys Astrostacker" -DestinationPath "Hayseys-Astrostacker-Windows-x64.zip"
+      - name: Include README
+        run: copy README_plain.txt "dist\Hayseys Astrostacker\README.txt"
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
           name: Hayseys-Astrostacker-Windows-x64
-          path: Hayseys-Astrostacker-Windows-x64.zip
+          path: dist/Hayseys Astrostacker/
           retention-days: 90
 
   build-macos-apple-silicon:
@@ -181,6 +179,11 @@ jobs:
         with:
           path: release-assets/
 
+      - name: Package Windows release zip
+        run: |
+          cd "release-assets/Hayseys-Astrostacker-Windows-x64"
+          zip -r "../../Hayseys-Astrostacker-Windows-x64.zip" .
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -206,7 +209,7 @@ jobs:
           files: |
             release-assets/Hayseys-Astrostacker-macOS-AppleSilicon/Hayseys-Astrostacker-macOS-AppleSilicon.zip
             release-assets/Hayseys-Astrostacker-macOS-Intel/Hayseys-Astrostacker-macOS-Intel.zip
-            release-assets/Hayseys-Astrostacker-Windows-x64/Hayseys-Astrostacker-Windows-x64.zip
+            Hayseys-Astrostacker-Windows-x64.zip
             release-assets/Hayseys-Astrostacker-Linux-x64/Hayseys-Astrostacker-Linux-x64.tar.gz
           draft: false
           prerelease: false
