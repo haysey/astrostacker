@@ -166,7 +166,7 @@ def _build_pixmap() -> QPixmap:
     p.setFont(ff)
     p.setPen(QColor(95, 110, 140))
     p.drawText(0, h - 44, w, 28, Qt.AlignmentFlag.AlignHCenter,
-               "Astronomical Society of Victoria  ·  © 2024 Andrew Hayes")
+               "© 2024 Andrew Hayes  ·  All rights reserved  ·  Personal non-commercial use only")
 
     p.end()
     return px
