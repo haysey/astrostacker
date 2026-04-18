@@ -125,6 +125,12 @@ def mark_wizard_done() -> None:
     s.setValue(_WIZARD_DONE_KEY, True)
 
 
+def reset_wizard() -> None:
+    """Clear the wizard-completed flag so it appears again on next launch."""
+    s = QSettings(SETTINGS_ORG, SETTINGS_APP)
+    s.remove(_WIZARD_DONE_KEY)
+
+
 class SetupWizard(QDialog):
     """Four-page first-run setup wizard."""
 

@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
 
 from astrostacker.config import APP_NAME, APP_CODENAME, APP_VERSION
 from astrostacker.gui.about_dialog import AboutDialog
-from astrostacker.gui.wizard import SetupWizard, should_show_wizard
+from astrostacker.gui.wizard import SetupWizard, should_show_wizard, reset_wizard
 from astrostacker.gui.background import generate_background_pixmap
 from astrostacker.gui.blink_dialog import BlinkDialog
 from astrostacker.gui.file_panel import FilePanel
@@ -650,6 +650,11 @@ class MainWindow(QMainWindow):
         wizard_action.triggered.connect(self._run_wizard)
         tools_menu.addAction(wizard_action)
 
+        reset_wizard_action = QAction("Reset Setup Wizard", self)
+        reset_wizard_action.setMenuRole(QAction.MenuRole.NoRole)
+        reset_wizard_action.triggered.connect(self._reset_wizard)
+        tools_menu.addAction(reset_wizard_action)
+
         tools_menu.addSeparator()
 
         about_action = QAction(f"About {APP_NAME}...", self)
@@ -1107,6 +1112,26 @@ class MainWindow(QMainWindow):
                 self.settings_panel.camera_combo.setCurrentIndex(idx)
             # Reload plate solve settings in case wizard saved API key / FOV
             self.platesolve_panel._load_api_key()
+
+    def _reset_wizard(self) -> None:
+        """Clear the wizard-completed flag so it appears again on next launch."""
+        reply = QMessageBox.question(
+            self,
+            "Reset Setup Wizard",
+            "This will reset the Setup Wizard so it appears the next time "
+            "the app is launched.\n\nYour other settings (API key, camera "
+            "type, focal length, etc.) are not affected.\n\nContinue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            reset_wizard()
+            QMessageBox.information(
+                self,
+                "Reset Setup Wizard",
+                "Done. The Setup Wizard will appear the next time you launch "
+                "the app.\n\nYou can also run it now from Tools → Setup Wizard.",
+            )
 
     def _open_user_manual(self):
         """Open USER_MANUAL.txt with the system default text viewer."""
