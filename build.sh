@@ -33,15 +33,22 @@ python3 -m PyInstaller astrostacker.spec --clean
 echo ""
 echo "=== Build Complete ==="
 
+# Copy plain-text README into the dist folder alongside the app
 if [ "$(uname -s)" = "Darwin" ]; then
+    cp README_plain.txt "dist/README.txt"
     echo "Output: dist/Hayseys Astrostacker.app"
+    echo "README: dist/README.txt"
     echo ""
     echo "To run:  open 'dist/Hayseys Astrostacker.app'"
-    echo "To distribute: zip the .app or create a DMG"
+    echo "To distribute: zip the .app and README.txt together"
 elif [ "$(uname -s)" = "Linux" ]; then
+    cp README_plain.txt "dist/Hayseys Astrostacker/README.txt"
     echo "Output: dist/Hayseys Astrostacker/Hayseys Astrostacker"
+    echo "README: dist/Hayseys Astrostacker/README.txt"
     echo ""
     echo "To run:  ./dist/Hayseys\\ Astrostacker/Hayseys\\ Astrostacker"
 else
+    cp README_plain.txt "dist/Hayseys Astrostacker/README.txt"
     echo "Output: dist/Hayseys Astrostacker/"
+    echo "README: dist/Hayseys Astrostacker/README.txt"
 fi
