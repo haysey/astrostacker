@@ -145,7 +145,8 @@ class PlateSolvePanel(QWidget):
 
         self.focal_length_spin = QSpinBox()
         self.focal_length_spin.setRange(1, 20000)
-        self.focal_length_spin.setValue(500)
+        self.focal_length_spin.setValue(1)
+        self.focal_length_spin.setSpecialValueText("Enter your focal length")
         self.focal_length_spin.setSuffix("  mm")
         self.focal_length_spin.setToolTip(
             "Your telescope or lens focal length in millimetres.\n"
@@ -315,7 +316,7 @@ class PlateSolvePanel(QWidget):
             self.api_key_input.setText(saved_key)
             self.api_key_input.blockSignals(False)
 
-        focal = settings.value("astrometry/focal_length", 500, type=int)
+        focal = settings.value("astrometry/focal_length", 1, type=int)
         pixel = settings.value("astrometry/pixel_size", 0.0, type=float)
         preset_idx = settings.value("astrometry/camera_preset", 0, type=int)
         self.focal_length_spin.setValue(focal)
