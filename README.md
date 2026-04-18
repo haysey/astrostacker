@@ -166,39 +166,150 @@ To download: go to **Actions** > click the latest successful run (green tick) > 
 
 #### Linux (Ubuntu, Debian, Mint)
 
-**Option A — Pre-built binary (easiest):**
+> **Tested on:** Ubuntu 22.04, Ubuntu 24.04, Debian 12, Linux Mint 21+
 
-1. Download `Hayseys-Astrostacker-Linux-x64.tar.gz`
-2. Extract it: `tar -xzf Hayseys-Astrostacker-Linux-x64.tar.gz`
-3. Run it: `cd "Hayseys Astrostacker" && ./"Hayseys Astrostacker"`
+The easiest way to install on Linux is the one-command installer. It handles everything automatically — system libraries, Python environment, desktop shortcut, and launcher.
 
-**Option B — Install from source (recommended for most users):**
+**Step 1 — Open a Terminal**
 
-1. Open a terminal
-2. Download and run the installer:
-   ```
-   wget https://raw.githubusercontent.com/haysey/astrostacker/main/install_linux.sh
-   chmod +x install_linux.sh
-   ./install_linux.sh
-   ```
-3. The installer creates a desktop shortcut and adds the app to your applications menu
-4. To update later: `cd ~/astrostacker && git pull`
+- On **Ubuntu**: Press `Ctrl + Alt + T` on your keyboard, or right-click the desktop and choose **Open Terminal**
+- On **Linux Mint**: Click the **Terminal** icon in the taskbar, or go to Menu > Terminal
+- On **Debian**: Press `Ctrl + Alt + T`, or find Terminal in your applications menu
 
-#### Raspberry Pi (Pi 4, Pi 5 — 64-bit Raspberry Pi OS)
+You should see a black window with a blinking cursor. This is where you type the commands below.
 
-Raspberry Pi uses a dedicated install script that installs Qt6 from the system and the rest via pip. This is faster and more reliable than a pre-built binary on ARM.
+**Step 2 — Run the installer**
 
-1. Open a terminal on your Pi
-2. Download and run the installer:
-   ```
-   wget https://raw.githubusercontent.com/haysey/astrostacker/main/install_rpi.sh
-   chmod +x install_rpi.sh
-   ./install_rpi.sh
-   ```
-3. The installer handles everything — system packages, Python environment, desktop shortcut
-4. Launch from the desktop icon or run `~/astrostacker/run.sh`
+Copy and paste each line below into the terminal, pressing **Enter** after each one:
 
-> **Pi performance note:** A Raspberry Pi 4 (4GB+) or Pi 5 will happily stack 20-30 frames at a time. Stacking is CPU-bound, so expect it to take longer than a desktop — but it works well for smaller batches. Drizzle and mosaic building will be slow on a Pi; disable drizzle for faster results.
+```bash
+wget https://raw.githubusercontent.com/haysey/astrostacker/main/install_linux.sh
+```
+```bash
+chmod +x install_linux.sh
+```
+```bash
+./install_linux.sh
+```
+
+> **What is this doing?**
+> - `wget` downloads the installer script
+> - `chmod +x` makes it executable (permission to run)
+> - `./install_linux.sh` runs it
+>
+> The installer will ask for your password once (to install system libraries). This is normal — type your login password and press Enter. You won't see the characters as you type, that's also normal.
+
+**Step 3 — Wait for it to finish**
+
+The installer will show progress as it works through 5 steps. The first run downloads and installs packages, so it may take 5–10 minutes depending on your internet speed. You'll see:
+
+```
+[1/5] Installing system packages...
+[2/5] Getting source code...
+[3/5] Setting up Python environment...
+[4/5] Creating launcher...
+[5/5] Creating desktop shortcut...
+Installation complete!
+```
+
+**Step 4 — Launch the app**
+
+Once complete, you can launch it two ways:
+- Find **Haysey's AstroStacker** in your applications menu (under Science or Graphics)
+- Or type this in the terminal: `~/astrostacker/run.sh`
+
+**Updating to a newer version**
+
+Open a terminal and run:
+```bash
+cd ~/astrostacker && git pull
+```
+
+**Troubleshooting**
+
+If the app doesn't launch, try running it from the terminal so you can see any error messages:
+```bash
+~/astrostacker/run.sh
+```
+
+If you see an error about missing libraries, run the installer again — it will fix them:
+```bash
+./install_linux.sh
+```
+
+If you see a "permission denied" error on the desktop shortcut:
+- Right-click the shortcut on your desktop
+- Click **Properties** (or **Allow Launching**)
+- Tick **Allow executing file as program**
+
+---
+
+#### Raspberry Pi (Pi 4 or Pi 5 — 64-bit Raspberry Pi OS)
+
+> **Requirements:** Raspberry Pi 4 (4GB RAM minimum) or Pi 5, running **64-bit Raspberry Pi OS** (Bookworm recommended). This will **not** work on 32-bit Raspberry Pi OS.
+
+> **How do I know if I have 64-bit?** Open a terminal and type `uname -m`. If it says `aarch64` you have 64-bit. If it says `armv7l` you have 32-bit and will need to reinstall the OS.
+
+Raspberry Pi uses a dedicated installer that installs Qt6 from the system package manager — this is more reliable than a pre-built binary on ARM hardware.
+
+**Step 1 — Open a Terminal**
+
+Click the **Terminal** icon in the taskbar at the top of the screen, or go to the Raspberry Pi menu > Accessories > Terminal.
+
+**Step 2 — Run the installer**
+
+Copy and paste each line into the terminal, pressing **Enter** after each one:
+
+```bash
+wget https://raw.githubusercontent.com/haysey/astrostacker/main/install_rpi.sh
+```
+```bash
+chmod +x install_rpi.sh
+```
+```bash
+./install_rpi.sh
+```
+
+> The installer will ask for your password once to install system packages. Type your password (you won't see it as you type) and press Enter.
+
+**Step 3 — Wait for it to finish**
+
+On a Raspberry Pi, the first install takes longer than on a desktop PC — **10 to 20 minutes** is normal because it's compiling some packages for the ARM processor. You'll see it working through 5 steps. Let it run until you see:
+
+```
+Installation complete!
+```
+
+Don't close the terminal window while it's running.
+
+**Step 4 — Launch the app**
+
+Once complete, look for the **Haysey's AstroStacker** icon on your desktop. Double-click it to launch.
+
+Alternatively, type this in the terminal:
+```bash
+~/astrostacker/run.sh
+```
+
+**Updating to a newer version**
+
+Open a terminal and run:
+```bash
+cd ~/astrostacker && git pull
+```
+
+**Troubleshooting**
+
+If the app doesn't open when you double-click the desktop icon:
+- Right-click the icon and choose **Execute** or **Run**
+- Or open a terminal and type `~/astrostacker/run.sh` to see any error messages
+
+If you see errors about missing packages, run the installer again:
+```bash
+./install_rpi.sh
+```
+
+> **Performance note:** A Raspberry Pi 4 (4GB+) or Pi 5 will happily stack 20–30 light frames. Stacking is CPU-bound so it takes longer than a desktop PC — that's expected. For best performance, disable Drizzle and keep frame counts moderate. The Pi 5 is noticeably faster than the Pi 4 for this kind of work.
 
 ---
 
