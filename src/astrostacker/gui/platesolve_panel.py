@@ -106,9 +106,7 @@ class PlateSolvePanel(QWidget):
 
         # ── FOV Calculator ──────────────────────────────────────────
         calc_label = QLabel(
-            "Enter your telescope focal length and camera pixel size.\n"
-            "Find both values in your equipment manuals or spec sheets.\n"
-            "Set once — the app remembers them every session."
+            "Enter your scope and camera details once — the app remembers them."
         )
         calc_label.setWordWrap(True)
         calc_label.setStyleSheet("color: rgba(255,255,255,0.55); font-size: 11px;")
@@ -116,30 +114,33 @@ class PlateSolvePanel(QWidget):
 
         calc_form = QFormLayout()
         calc_form.setSpacing(6)
+        calc_form.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow
+        )
 
         self.focal_length_spin = QSpinBox()
         self.focal_length_spin.setRange(1, 20000)
         self.focal_length_spin.setValue(1)
-        self.focal_length_spin.setSpecialValueText("e.g.  335")
-        self.focal_length_spin.setSuffix("  mm")
+        self.focal_length_spin.setSpecialValueText("e.g. 335")
+        self.focal_length_spin.setSuffix(" mm")
         self.focal_length_spin.setToolTip(
             "Your telescope focal length in millimetres.\n"
             "Printed on the tube or in the manual."
         )
-        calc_form.addRow("Telescope focal length", self.focal_length_spin)
+        calc_form.addRow("Focal length", self.focal_length_spin)
 
         self.pixel_size_spin = QDoubleSpinBox()
         self.pixel_size_spin.setRange(0.01, 50.0)
         self.pixel_size_spin.setValue(0.01)
         self.pixel_size_spin.setDecimals(2)
-        self.pixel_size_spin.setSpecialValueText("e.g.  4.63")
-        self.pixel_size_spin.setSuffix("  µm")
+        self.pixel_size_spin.setSpecialValueText("e.g. 4.63")
+        self.pixel_size_spin.setSuffix(" µm")
         self.pixel_size_spin.setToolTip(
             "Your camera's pixel size in micrometres (µm).\n"
             "Find this in your camera's spec sheet or manual.\n"
             "Every camera model has a different value."
         )
-        calc_form.addRow("Camera pixel size", self.pixel_size_spin)
+        calc_form.addRow("Pixel size", self.pixel_size_spin)
 
         hints_layout.addLayout(calc_form)
 

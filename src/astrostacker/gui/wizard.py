@@ -7,18 +7,16 @@ solving setup, and a quick-start guide. Can be re-launched from Help menu.
 from __future__ import annotations
 
 from PyQt6.QtCore import QSettings, Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QDoubleValidator, QFont, QIntValidator
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QDialog,
-    QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
     QRadioButton,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -350,27 +348,26 @@ class SetupWizard(QDialog):
         self._api_input.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow("API Key", self._api_input)
 
-        self._focal_spin = QSpinBox()
-        self._focal_spin.setRange(1, 20_000)
-        self._focal_spin.setValue(1)
-        self._focal_spin.setSpecialValueText("e.g.  335")
-        self._focal_spin.setSuffix("  mm")
-        self._focal_spin.setToolTip(
-            "Your telescope focal length, printed on the tube or in the manual."
+        self._focal_input = QLineEdit()
+        self._focal_input.setPlaceholderText("e.g. 335")
+        self._focal_input.setValidator(QIntValidator(1, 20000, self))
+        self._focal_input.setToolTip(
+            "Your telescope focal length in millimetres.\n"
+            "Printed on the tube or in the manual (e.g. f=335mm → enter 335)."
         )
-        form.addRow("Telescope focal length", self._focal_spin)
+        form.addRow("Focal length (mm)", self._focal_input)
 
-        self._pixel_spin = QDoubleSpinBox()
-        self._pixel_spin.setRange(0.01, 50.0)
-        self._pixel_spin.setValue(0.01)
-        self._pixel_spin.setDecimals(2)
-        self._pixel_spin.setSpecialValueText("e.g.  4.63")
-        self._pixel_spin.setSuffix("  µm")
-        self._pixel_spin.setToolTip(
-            "Your camera's pixel size in micrometres — find it in your camera's\n"
-            "spec sheet or product page. Every camera model has a different value."
+        self._pixel_input = QLineEdit()
+        self._pixel_input.setPlaceholderText("e.g. 4.63")
+        validator = QDoubleValidator(0.01, 50.0, 2, self)
+        validator.setNotation(QDoubleValidator.Notation.StandardNotation)
+        self._pixel_input.setValidator(validator)
+        self._pixel_input.setToolTip(
+            "Your camera's pixel size in micrometres (µm).\n"
+            "Find this in your camera's spec sheet or product page.\n"
+            "Every camera model has a different value."
         )
-        form.addRow("Camera pixel size", self._pixel_spin)
+        form.addRow("Pixel size (µm)", self._pixel_input)
 
         ly.addLayout(form)
         ly.addStretch()
@@ -495,13 +492,19 @@ class SetupWizard(QDialog):
         if api_key:
             s.setValue("astrometry/api_key", api_key)
 
-        focal = self._focal_spin.value()
-        if focal > 1:
-            s.setValue("astrometry/focal_length", focal)
+        try:
+            focal = int(self._focal_input.text())
+            if focal > 0:
+                s.setValue("astrometry/focal_length", focal)
+        except (ValueError, AttributeError):
+            pass
 
-        pixel = self._pixel_spin.value()
-        if pixel > 0.01:
-            s.setValue("astrometry/pixel_size", pixel)
+        try:
+            pixel = float(self._pixel_input.text())
+            if pixel > 0:
+                s.setValue("astrometry/pixel_size", pixel)
+        except (ValueError, AttributeError):
+            pass
 
         mark_wizard_done()
         self.accept()
