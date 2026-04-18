@@ -15,7 +15,7 @@ def main():
     app.setApplicationVersion(APP_VERSION)
 
     # Show Beta Bronze splash screen while the main window loads
-    splash = SplashScreen.show_for(app, duration_ms=2800)
+    splash = SplashScreen.show_for(app, duration_ms=5000)
 
     window = MainWindow()
     window.show()

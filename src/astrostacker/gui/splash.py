@@ -39,7 +39,7 @@ class SplashScreen(QSplashScreen):
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint)
 
     @staticmethod
-    def show_for(app: QApplication, duration_ms: int = 2800) -> "SplashScreen":
+    def show_for(app: QApplication, duration_ms: int = 5000) -> "SplashScreen":
         """Display the splash and schedule auto-close.
 
         Args:
