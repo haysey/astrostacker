@@ -285,6 +285,12 @@ class PlateSolvePanel(QWidget):
         self.focal_length_spin.setValue(focal)
         self.pixel_size_spin.setValue(pixel)
 
+        # Auto-apply scale hints on startup if focal length has been saved.
+        # This means beginners only need to enter their scope details once —
+        # the correct scale bounds are applied automatically every session.
+        if settings.contains("astrometry/focal_length"):
+            self._calculate_scale()
+
     def _save_api_key(self):
         """Save the API key to user preferences whenever it changes."""
         settings = QSettings(SETTINGS_ORG, SETTINGS_APP)
