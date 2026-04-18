@@ -642,6 +642,7 @@ class MainWindow(QMainWindow):
         self.progress_panel.start_btn.clicked.connect(self._on_start_cancel)
         self.file_panel.lights.files_changed.connect(self._on_lights_changed)
         self.mosaic_panel.build_btn.clicked.connect(self._on_build_mosaic)
+        self.settings_panel.auto_solve_check.toggled.connect(self._on_auto_solve_toggled)
 
     def _on_file_selected(self, path: str):
         self.preview_panel.show_file(path)
@@ -657,6 +658,22 @@ class MainWindow(QMainWindow):
     def _on_lights_changed(self):
         count = self.file_panel.lights.count()
         self.settings_panel.set_max_reference(count)
+
+    def _on_auto_solve_toggled(self, checked: bool):
+        """Warn the user if they enable auto plate solve without scale hints set."""
+        if not checked:
+            return
+        ps = self.platesolve_panel
+        if ps.scale_lower_spin.value() == 0 or ps.scale_upper_spin.value() == 0:
+            QMessageBox.information(
+                self,
+                "Set Your Equipment Details First",
+                "Before using Auto Plate Solve, please go to the Plate Solve tab "
+                "and enter your telescope focal length and camera pixel size, "
+                "then click Calculate & Apply.\n\n"
+                "Without these, plate solving can take 10+ minutes or fail entirely.\n\n"
+                "You only need to do this once — the app remembers your setup."
+            )
 
     def _on_start_cancel(self):
         if self._worker is not None:
