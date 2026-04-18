@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QStyle,
     QTextEdit,
     QVBoxLayout,
@@ -97,32 +98,100 @@ class PlateSolvePanel(QWidget):
 
         layout.addWidget(image_group)
 
-        # Scale hints (optional, speeds up solving)
-        hints_group = QGroupBox("Scale Hints (optional)")
-        hints_layout = QFormLayout(hints_group)
-        hints_layout.setSpacing(10)
+        # Scale hints (optional, speeds up solving dramatically)
+        hints_group = QGroupBox("Scale Hints  —  strongly recommended")
+        hints_layout = QVBoxLayout(hints_group)
+        hints_layout.setSpacing(8)
         hints_layout.setContentsMargins(12, 20, 12, 12)
+
+        # ── FOV Calculator ──────────────────────────────────────────
+        calc_label = QLabel(
+            "Enter your telescope and camera specs to auto-calculate the scale.\n"
+            "Without this, solving can take 10+ minutes or fail entirely."
+        )
+        calc_label.setWordWrap(True)
+        calc_label.setStyleSheet("color: rgba(255,255,255,0.55); font-size: 11px;")
+        hints_layout.addWidget(calc_label)
+
+        calc_form = QFormLayout()
+        calc_form.setSpacing(6)
+
+        self.focal_length_spin = QSpinBox()
+        self.focal_length_spin.setRange(1, 20000)
+        self.focal_length_spin.setValue(500)
+        self.focal_length_spin.setSuffix("  mm")
+        self.focal_length_spin.setToolTip(
+            "Your telescope or lens focal length in millimetres.\n"
+            "Examples: 135mm lens = 135, SCT 8\" f/10 = 2032, Refractor 80/600 = 600"
+        )
+        calc_form.addRow("Focal length", self.focal_length_spin)
+
+        self.pixel_size_spin = QDoubleSpinBox()
+        self.pixel_size_spin.setRange(0.1, 50.0)
+        self.pixel_size_spin.setValue(3.76)
+        self.pixel_size_spin.setDecimals(2)
+        self.pixel_size_spin.setSuffix("  µm")
+        self.pixel_size_spin.setToolTip(
+            "Your camera's pixel size in micrometres.\n"
+            "Find this in your camera's spec sheet.\n"
+            "Common values: ASI294MC = 4.63 µm, ASI183 = 2.4 µm,\n"
+            "ASI1600 = 3.8 µm, Canon APS-C DSLR ≈ 4.3 µm,\n"
+            "Sony A7 full-frame ≈ 5.9 µm"
+        )
+        calc_form.addRow("Pixel size", self.pixel_size_spin)
+
+        hints_layout.addLayout(calc_form)
+
+        # Calculate button + result label
+        calc_row = QHBoxLayout()
+        calc_btn = QPushButton("Calculate & Apply")
+        calc_btn.setObjectName("secondaryButton")
+        calc_btn.setToolTip(
+            "Calculates arcsec/pixel from your focal length and pixel size,\n"
+            "then sets the scale bounds with ±25% tolerance."
+        )
+        calc_btn.clicked.connect(self._calculate_scale)
+        calc_row.addWidget(calc_btn)
+
+        self.calc_result_label = QLabel("")
+        self.calc_result_label.setStyleSheet(
+            "color: #E8A044; font-size: 11px; padding-left: 8px;"
+        )
+        calc_row.addWidget(self.calc_result_label)
+        calc_row.addStretch()
+        hints_layout.addLayout(calc_row)
+
+        # Divider
+        divider = QWidget()
+        divider.setFixedHeight(1)
+        divider.setStyleSheet("background: rgba(255,255,255,0.08);")
+        hints_layout.addWidget(divider)
+
+        # ── Manual scale entry ──────────────────────────────────────
+        manual_form = QFormLayout()
+        manual_form.setSpacing(6)
 
         self.scale_units_combo = QComboBox()
         self.scale_units_combo.addItem("Arcsec/pixel", "arcsecperpix")
         self.scale_units_combo.addItem("Arcmin (field width)", "arcminwidth")
         self.scale_units_combo.addItem("Degrees (field width)", "degwidth")
-        hints_layout.addRow("Units", self.scale_units_combo)
+        manual_form.addRow("Units", self.scale_units_combo)
 
         self.scale_lower_spin = QDoubleSpinBox()
         self.scale_lower_spin.setRange(0, 9999)
         self.scale_lower_spin.setValue(0)
-        self.scale_lower_spin.setDecimals(2)
-        self.scale_lower_spin.setSpecialValueText("Auto")
-        hints_layout.addRow("Lower Bound", self.scale_lower_spin)
+        self.scale_lower_spin.setDecimals(3)
+        self.scale_lower_spin.setSpecialValueText("Not set")
+        manual_form.addRow("Lower bound", self.scale_lower_spin)
 
         self.scale_upper_spin = QDoubleSpinBox()
         self.scale_upper_spin.setRange(0, 9999)
         self.scale_upper_spin.setValue(0)
-        self.scale_upper_spin.setDecimals(2)
-        self.scale_upper_spin.setSpecialValueText("Auto")
-        hints_layout.addRow("Upper Bound", self.scale_upper_spin)
+        self.scale_upper_spin.setDecimals(3)
+        self.scale_upper_spin.setSpecialValueText("Not set")
+        manual_form.addRow("Upper bound", self.scale_upper_spin)
 
+        hints_layout.addLayout(manual_form)
         layout.addWidget(hints_group)
 
         # Solve button
@@ -177,14 +246,44 @@ class PlateSolvePanel(QWidget):
 
     # ── API key persistence ──
 
+    def _calculate_scale(self):
+        """Calculate arcsec/pixel from focal length + pixel size and apply to bounds."""
+        focal_mm = self.focal_length_spin.value()
+        pixel_um = self.pixel_size_spin.value()
+
+        # Standard formula: arcsec/pixel = (pixel_size_µm / focal_length_mm) × 206.265
+        arcsec_per_px = (pixel_um / focal_mm) * 206.265
+
+        # Apply ±25% tolerance so the solver has a comfortable search window
+        lower = round(arcsec_per_px * 0.75, 3)
+        upper = round(arcsec_per_px * 1.25, 3)
+
+        self.scale_units_combo.setCurrentIndex(0)  # Arcsec/pixel
+        self.scale_lower_spin.setValue(lower)
+        self.scale_upper_spin.setValue(upper)
+
+        self.calc_result_label.setText(
+            f"{arcsec_per_px:.3f} arcsec/px  →  {lower} – {upper}"
+        )
+
+        # Persist the values
+        settings = QSettings(SETTINGS_ORG, SETTINGS_APP)
+        settings.setValue("astrometry/focal_length", focal_mm)
+        settings.setValue("astrometry/pixel_size", pixel_um)
+
     def _load_api_key(self):
-        """Load the saved API key from user preferences."""
+        """Load the saved API key and FOV calculator values from user preferences."""
         settings = QSettings(SETTINGS_ORG, SETTINGS_APP)
         saved_key = settings.value("astrometry/api_key", "", type=str)
         if saved_key:
             self.api_key_input.blockSignals(True)
             self.api_key_input.setText(saved_key)
             self.api_key_input.blockSignals(False)
+
+        focal = settings.value("astrometry/focal_length", 500, type=int)
+        pixel = settings.value("astrometry/pixel_size", 3.76, type=float)
+        self.focal_length_spin.setValue(focal)
+        self.pixel_size_spin.setValue(pixel)
 
     def _save_api_key(self):
         """Save the API key to user preferences whenever it changes."""
