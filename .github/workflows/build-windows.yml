@@ -30,7 +30,7 @@ jobs:
 
       - name: Include README and zip
         run: |
-          copy README.md "dist\Hayseys Astrostacker\README.txt"
+          copy README_plain.txt "dist\Hayseys Astrostacker\README.txt"
           Compress-Archive -Path "dist\Hayseys Astrostacker" -DestinationPath "Hayseys-Astrostacker-Windows-x64.zip"
 
       - name: Upload Windows build
@@ -63,7 +63,7 @@ jobs:
 
       - name: Zip macOS app bundle with README
         run: |
-          cp README.md dist/README.txt
+          cp README_plain.txt dist/README.txt
           cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-AppleSilicon.zip" "Hayseys Astrostacker.app" "README.txt"
 
       - name: Upload macOS Apple Silicon build
@@ -117,7 +117,7 @@ jobs:
 
       - name: Package Linux app
         run: |
-          cp README.md "dist/Hayseys Astrostacker/README.txt"
+          cp README_plain.txt "dist/Hayseys Astrostacker/README.txt"
           cd dist && tar -czf "../Hayseys-Astrostacker-Linux-x64.tar.gz" "Hayseys Astrostacker/"
 
       - name: Upload Linux build
@@ -151,7 +151,7 @@ jobs:
 
       - name: Zip macOS app bundle with README
         run: |
-          cp README.md dist/README.txt
+          cp README_plain.txt dist/README.txt
           cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-Intel.zip" "Hayseys Astrostacker.app" "README.txt"
 
       - name: Upload macOS Intel build
