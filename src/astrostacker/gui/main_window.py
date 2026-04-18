@@ -634,18 +634,21 @@ class MainWindow(QMainWindow):
         header_action.triggered.connect(self._view_fits_header)
         tools_menu.addAction(header_action)
 
-        # Help menu
-        help_menu = menu_bar.addMenu("Help")
+        tools_menu.addSeparator()
 
+        # Setup Wizard — NoRole prevents macOS from auto-promoting it
+        # out of the menu into the application menu as "Preferences"
         wizard_action = QAction("Setup Wizard...", self)
+        wizard_action.setMenuRole(QAction.MenuRole.NoRole)
         wizard_action.triggered.connect(self._run_wizard)
-        help_menu.addAction(wizard_action)
+        tools_menu.addAction(wizard_action)
 
-        help_menu.addSeparator()
+        tools_menu.addSeparator()
 
         about_action = QAction(f"About {APP_NAME}...", self)
+        about_action.setMenuRole(QAction.MenuRole.NoRole)
         about_action.triggered.connect(self._show_about)
-        help_menu.addAction(about_action)
+        tools_menu.addAction(about_action)
 
     def _connect_signals(self):
         self.file_panel.file_selected.connect(self._on_file_selected)
