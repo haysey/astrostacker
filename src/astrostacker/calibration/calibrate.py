@@ -40,23 +40,30 @@ def _match_shape(
     cal_hw = cal_frame.shape[:2]
     tgt_hw = target_shape[:2]
 
-    if cal_hw == tgt_hw:
-        return cal_frame
+    if cal_hw != tgt_hw:
+        log.warning(
+            "Master %s is %s but lights are %s — resizing to match",
+            label, "×".join(map(str, cal_hw)), "×".join(map(str, tgt_hw)),
+        )
 
-    log.warning(
-        "Master %s is %s but lights are %s — resizing to match",
-        label, "×".join(map(str, cal_hw)), "×".join(map(str, tgt_hw)),
-    )
+        # Compute zoom factors for the spatial dimensions
+        factors = [tgt_hw[0] / cal_hw[0], tgt_hw[1] / cal_hw[1]]
 
-    # Compute zoom factors for the spatial dimensions
-    factors = [tgt_hw[0] / cal_hw[0], tgt_hw[1] / cal_hw[1]]
+        # If the cal frame is 3-D (colour), don't scale the channel axis
+        if cal_frame.ndim == 3:
+            factors.append(1.0)
 
-    # If the cal frame is 3-D (colour), don't scale the channel axis
-    if cal_frame.ndim == 3:
-        factors.append(1.0)
+        resized = zoom(cal_frame.astype(np.float64), factors, order=1)
+        cal_frame = np.ascontiguousarray(resized, dtype=np.float32)
 
-    resized = zoom(cal_frame.astype(np.float64), factors, order=1)
-    return np.ascontiguousarray(resized, dtype=np.float32)
+    # If the light is colour (H,W,3) but the calibration frame is mono
+    # (H,W), add a channel axis so NumPy can broadcast across all channels.
+    # This happens when the capture software saves pre-debayered colour FITS
+    # but the darks/flats are raw mono frames.
+    if len(target_shape) == 3 and cal_frame.ndim == 2:
+        cal_frame = cal_frame[:, :, np.newaxis]
+
+    return cal_frame
 
 
 def prepare_flat_divisor(
