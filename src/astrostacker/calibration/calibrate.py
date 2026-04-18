@@ -58,8 +58,11 @@ def _match_shape(
 
     # If the light is colour (H,W,3) but the calibration frame is mono
     # (H,W), add a channel axis so NumPy can broadcast across all channels.
-    # This happens when the capture software saves pre-debayered colour FITS
-    # but the darks/flats are raw mono frames.
+    # This happens when the capture software stores lights as 3-plane FITS
+    # (NAXIS3=3) but saves darks/flats as standard 2D FITS — both from the
+    # same camera, but written in different formats by the software.
+    # Subtracting the same dark value and dividing by the same flat ratio
+    # across all three channels is mathematically correct in either case.
     if len(target_shape) == 3 and cal_frame.ndim == 2:
         cal_frame = cal_frame[:, :, np.newaxis]
 
