@@ -1,0 +1,1280 @@
+================================================================================
+       HAYSEY'S ASTROSTACKER  —  USER MANUAL
+       Version 1.0.0  Beta Bronze
+       Australian Skywatchers Victoria
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+  1.  Introduction
+  2.  System Requirements & Supported File Formats
+  3.  Interface Overview
+  4.  First-Run Setup Wizard
+  5.  The Stacking Tab — Loading Your Frames
+       5.1  Light Frames
+       5.2  Dark Frames
+       5.3  Flat Frames
+       5.4  Dark Flat Frames
+       5.5  Master Dark / Master Flat (Pre-Built)
+       5.6  Drag-and-Drop & Folder Import
+  6.  Settings Panel — Camera & Processing
+       6.1  Camera Type
+       6.2  Bayer Pattern
+       6.3  Stacking Method
+            - Mean (Average)
+            - Median
+            - Sigma Clipping
+            - Winsorized Sigma
+            - Percentile Clipping
+            - Weighted Mean (Quality)
+            - Noise-Weighted Mean
+            - Minimum / Maximum
+       6.4  Stacking Method Parameters
+       6.5  Reference Frame
+       6.6  Output File
+  7.  Processing Options
+       7.1  Auto-Reject Blurry/Trailed Frames
+       7.2  Remove Light Pollution Gradient
+       7.3  Local Normalisation (Per-Frame)
+       7.4  Auto-Crop Stacking Edges
+       7.5  Denoise
+       7.6  Sharpen
+       7.7  Drizzle (2x Resolution)
+       7.8  Auto Plate Solve After Stacking
+  8.  Running the Pipeline
+       8.1  Starting a Stack
+       8.2  The Progress Log
+       8.3  Cancelling a Run
+       8.4  What Happens Behind the Scenes
+  9.  Preview Panel & Histogram
+ 10.  Plate Solve Tab
+       10.1 What is Plate Solving?
+       10.2 Getting a Free API Key
+       10.3 Setting Scale Hints (Strongly Recommended)
+       10.4 Finding Your Focal Length
+       10.5 Finding Your Camera Pixel Size
+       10.6 Manual Plate Solving
+       10.7 The Solve Result Window
+       10.8 Embedding WCS into Any FITS File
+       10.9 Auto Plate Solve After Stacking
+ 11.  Mosaic Tab
+ 12.  Tools Menu
+       12.1 Blink Comparator
+       12.2 View FITS Header
+       12.3 Setup Wizard
+       12.4 About
+ 13.  File Menu
+       13.1 Save Session / Load Session
+       13.2 Export as TIFF / PNG
+ 14.  Stacking Strategy Guide
+       14.1 Choosing the Right Stacking Method
+       14.2 How Many Frames Do I Need?
+       14.3 Calibration Frame Guide
+       14.4 Colour vs. Mono Cameras
+       14.5 Drizzle — When to Use It
+ 15.  Troubleshooting
+ 16.  Glossary
+
+
+================================================================================
+1.  INTRODUCTION
+================================================================================
+
+Haysey's Astrostacker is a free, open-source astrophotography image stacking
+application developed for the Australian Skywatchers Victoria club. It is
+designed to be approachable for complete beginners while offering the full
+suite of processing tools that experienced imagers expect.
+
+The core purpose of the app is image stacking: taking many individual
+exposures (called "frames") of the same object and combining them into one
+clean, detailed image. Stacking dramatically reduces noise, reveals faint
+detail, and eliminates transient artefacts such as satellite trails, cosmic
+rays, and hot pixels.
+
+Key features:
+  - Full calibration pipeline (darks, flats, dark flats, master frames)
+  - 9 stacking methods with real-time parameter control
+  - Automatic frame quality scoring and rejection
+  - Colour camera debayering (RGGB, BGGR, GBRG, GRBG)
+  - Star alignment across all frames
+  - Light pollution gradient removal
+  - Non-Local Means denoising
+  - PSF-informed sharpening (Richardson-Lucy / unsharp-mask hybrid)
+  - Drizzle 2x super-resolution stacking
+  - Plate solving via nova.astrometry.net with WCS embedding
+  - Mosaic stitching from multiple plate-solved panels
+  - Blink comparator for visual frame inspection
+  - Session save/load
+  - TIFF and PNG export
+
+
+================================================================================
+2.  SYSTEM REQUIREMENTS & SUPPORTED FILE FORMATS
+================================================================================
+
+Supported operating systems:
+  - macOS 12 or later  (Apple Silicon natively compiled, Intel supported)
+  - Windows 10 / 11  (x64)
+  - Linux  (x64 AppImage, tested on Ubuntu 22.04+)
+
+No installation required — the app is a self-contained bundle.
+
+Supported input file formats:
+  - FITS  (.fits, .fit, .fts)  — the standard format for astronomy cameras
+  - XISF  (.xisf)              — used by Sequence Generator Pro, N.I.N.A., etc.
+
+Export formats:
+  - FITS  (linear, full floating-point precision — preferred for further work)
+  - TIFF  (auto-stretched 16-bit, for sharing and further processing)
+  - PNG   (auto-stretched 8-bit, for quick previews and sharing)
+
+The app does not currently support raw camera formats (.CR2, .NEF, .ARW, etc.)
+directly. Use a tool such as AstroPixelProcessor, Siril, or even
+GIMP/darktable to convert raw files to FITS first, or shoot in FITS mode if
+your capture software supports it (e.g. N.I.N.A., SharpCap, FireCapture).
+
+Internet connection:
+  - Required only for the optional plate solving feature.
+  - All stacking, calibration, and processing runs entirely offline.
+
+
+================================================================================
+3.  INTERFACE OVERVIEW
+================================================================================
+
+The main window is divided into three regions:
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  MENU BAR  (File  |  Tools)                                             │
+  ├──────────────────┬──────────────────────────────────────────────────────┤
+  │                  │                                                       │
+  │  LEFT SIDEBAR    │          PREVIEW PANEL                               │
+  │  (Tabbed)        │   (image display + histogram on right)               │
+  │                  │                                                       │
+  │  · Stacking      │                                                       │
+  │  · Plate Solve   │                                                       │
+  │  · Mosaic        │                                                       │
+  │                  ├──────────────────────────────────────────────────────┤
+  │                  │  SETTINGS PANEL      │  PROGRESS / LOG PANEL         │
+  │                  │  (camera, method,    │  (Start button, progress      │
+  │                  │   processing opts)   │   bar, activity log)          │
+  ├──────────────────┴──────────────────────────────────────────────────────┤
+  │  FRAME STATUS BAR  (frame counts, accepted/rejected, version)           │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+Left Sidebar tabs:
+  - Stacking   — Load your light, dark, flat, and dark flat frames here.
+  - Plate Solve — Set up your API key and scale hints; solve images.
+  - Mosaic      — Stitch multiple plate-solved FITS panels into one image.
+
+The splitter handles between panels can be dragged to resize any region.
+
+
+================================================================================
+4.  FIRST-RUN SETUP WIZARD
+================================================================================
+
+On first launch, a four-page Setup Wizard appears automatically to help you
+configure the most important settings. You can re-open it any time via:
+  Tools > Setup Wizard...
+
+Page 1 — Welcome
+  Explains what image stacking is and what the wizard will cover.
+
+Page 2 — Your Camera
+  Choose Colour camera or Monochrome camera.
+  - Colour (Bayer) — Canon, Nikon, Sony DSLR/mirrorless, ZWO ASI colour,
+    Altair colour, Player One colour, and any other one-shot-colour camera.
+  - Monochrome — dedicated black-and-white astronomy cameras, typically used
+    with separate colour filters (LRGB, Ha, OIII, SII, etc.).
+  If you are unsure: if your images come out in colour straight from the
+  camera or capture software, choose Colour.
+
+Page 3 — Plate Solving (Optional)
+  Enter three values that help the plate solver find your image quickly:
+  - API Key     — a free key from nova.astrometry.net (see Section 10.2)
+  - Focal length (mm) — your telescope's focal length
+  - Pixel size (µm)   — your camera's pixel size in micrometres
+  You can skip this page and set it up later in the Plate Solve tab. See
+  Sections 10.4 and 10.5 for how to find these values.
+
+Page 4 — You're Ready!
+  A quick-start guide showing you the five steps to your first stack.
+
+Everything entered in the wizard is saved automatically. Your settings
+persist across app launches using your operating system's settings store.
+
+
+================================================================================
+5.  THE STACKING TAB — LOADING YOUR FRAMES
+================================================================================
+
+The Stacking tab in the left sidebar contains four frame lists. Only Light
+Frames are required — all other frame types are optional but improve results.
+
+── 5.1  LIGHT FRAMES ──────────────────────────────────────────────────────────
+
+Light frames are your actual exposures of the sky — the science images you
+took through the telescope. These are the only mandatory input.
+
+To add light frames, click the "Add" button and choose either:
+  - Add Files...   — opens a file picker for individual files
+  - Add Folder...  — scans a folder and adds all supported files from it
+
+The frame count is shown in the section header (e.g. "LIGHT FRAMES  (47)").
+
+Clicking a file in the list shows a preview of it in the Preview panel and
+sets it as the target image for a manual plate solve.
+
+── 5.2  DARK FRAMES ───────────────────────────────────────────────────────────
+
+Dark frames are exposures taken with the lens cap on (or camera covered) at
+the same temperature, gain, and exposure duration as your light frames. They
+capture the thermal noise (hot pixels, amp glow, dark current) generated by
+the sensor itself, which are then subtracted from each light frame.
+
+Best practice:
+  - Take at least 10–20 darks per imaging session.
+  - Match exposure time exactly to your light frames.
+  - Match camera temperature (critical for cooled astronomy cameras).
+  - You do not need to retake darks if temperature and settings match a
+    previous session — you can use a saved master dark instead.
+
+If you omit dark frames, the pipeline will skip dark subtraction. This is
+often acceptable for cooled cameras at low temperatures, or very short
+exposures where dark current is negligible.
+
+── 5.3  FLAT FRAMES ───────────────────────────────────────────────────────────
+
+Flat frames are evenly-lit exposures of a uniform light source — typically a
+flat panel, dawn/dusk sky, or white T-shirt over the front of the telescope.
+They capture vignetting (darkening toward the corners caused by the optics)
+and dust motes on the sensor or filters, which are then divided out from each
+light frame.
+
+Best practice:
+  - Take at least 10–20 flats per setup.
+  - Keep the focus position identical to your light frames.
+  - Flats must be taken with the same filter/camera rotation as your lights.
+  - Retake flats if you move the camera, rotate a filter, or refocus.
+  - Aim for a histogram midpoint around 30–50% of full well capacity.
+
+── 5.4  DARK FLAT FRAMES ──────────────────────────────────────────────────────
+
+Dark flat frames (also called "flat darks" or "bias frames") are short
+exposures taken with the camera covered, at the same exposure duration as
+your flat frames. They are used to calibrate the flats before the flats are
+used to calibrate the lights — a full calibration chain.
+
+For most cooled cameras and modern DSLRs, bias frames or dark flats are not
+strictly necessary, but they improve accuracy, especially if your flat
+exposure is more than a second or two.
+
+── 5.5  MASTER DARK / MASTER FLAT (PRE-BUILT) ─────────────────────────────────
+
+If you already have a master dark or master flat from a previous session (or
+built in another application), you can load them directly using the
+"Master Dark..." and "Master Flat..." buttons at the bottom of the Stacking
+tab. Loading a master frame overrides any individual frames in the list above.
+
+After loading, the filename is shown below the button as confirmation.
+
+The pipeline also saves the master dark and master flat it builds to the same
+folder as your stacked output, named "master_dark.fits" and "master_flat.fits".
+You can reload these in future sessions to save time.
+
+── 5.6  DRAG-AND-DROP & FOLDER IMPORT ─────────────────────────────────────────
+
+All four frame lists support drag-and-drop from your file manager or desktop.
+You can drag individual files or entire folders onto a list — folders are
+automatically scanned for supported image formats.
+
+The "Add Folder..." option in the Add button menu does the same thing via a
+folder picker dialog.
+
+Duplicate files are automatically skipped when adding to a list.
+
+
+================================================================================
+6.  SETTINGS PANEL — CAMERA & PROCESSING
+================================================================================
+
+The Settings panel sits at the bottom of the main window. Use the scroll bar
+inside it to see all options.
+
+── 6.1  CAMERA TYPE ────────────────────────────────────────────────────────────
+
+  Mono            — Monochrome camera. No debayering is performed.
+  Colour (Bayer)  — Colour / one-shot-colour camera. The app will debayer
+                    each frame from its raw Bayer mosaic to RGB before stacking.
+
+This must match your actual camera. If set to Mono with a colour camera (or
+vice versa), the stack will not turn out correctly.
+
+── 6.2  BAYER PATTERN ──────────────────────────────────────────────────────────
+
+Only visible when Camera Type is set to Colour (Bayer).
+
+The Bayer pattern describes the arrangement of red, green, and blue
+photosites on your sensor. It is a fixed property of the camera model and
+does not change between sessions.
+
+  RGGB  — Most common. Default for ZWO ASI, Altair, Player One, and most
+           DSLR/mirrorless cameras (Canon, Nikon, Sony).
+  BGGR  — Some Sony sensors. Check if colours look wrong with RGGB.
+  GBRG  — Less common. Try if RGGB and BGGR both produce wrong colours.
+  GRBG  — Less common.
+
+If you are unsure, start with RGGB. If your stacked image has swapped colours
+(e.g. nebula emission regions that should be red appear blue), try BGGR next.
+Your camera's specification sheet or manufacturer's website will list the
+correct value.
+
+── 6.3  STACKING METHOD ────────────────────────────────────────────────────────
+
+The stacking method determines how pixel values from multiple aligned frames
+are combined into one final value at each pixel position. The default is
+Median, which is safe for any frame count and any target.
+
+A full guide to choosing the right method is in Section 14.1. Brief summaries:
+
+  Mean (Average)
+    Takes the mathematical average of all pixel values at each position.
+    Maximum signal-to-noise ratio improvement with clean data. No outlier
+    rejection — a single satellite trail will appear in the result.
+    Use when: you have very clean data and no hot pixels or trails.
+
+  Median
+    Takes the middle value when all frame values are sorted at each position.
+    Excellent outlier rejection — satellite trails, hot pixels, and cosmic rays
+    are rejected without any parameter tuning.
+    Use when: any number of frames, any target, especially for first attempts.
+
+  Sigma Clipping
+    Iteratively identifies and rejects pixel values that are more than a set
+    number of standard deviations (sigma) from the median, then averages the
+    survivors. Better SNR than pure Median when you have 15+ frames.
+    Use when: 15 or more frames, especially when satellite trails are present.
+
+  Winsorized Sigma
+    Like Sigma Clipping but instead of discarding rejected pixels entirely,
+    it clamps them to the rejection threshold. Preserves more signal, making
+    it better than standard sigma clipping for smaller frame counts (8–15).
+    Use when: 8–15 frames, similar targets and exposure conditions to sigma.
+
+  Percentile Clipping
+    Sorts all values at each pixel position, discards the bottom X% and top
+    Y%, then averages the rest. Simple and effective with any frame count.
+    Very good at removing satellite trails and planes.
+    Use when: any frame count, especially with persistent interference.
+
+  Weighted Mean (Quality)
+    Like Mean but each frame is weighted by its sharpness and roundness.
+    Sharper frames with rounder stars contribute more to the result. Measures
+    star PSF profiles automatically before stacking.
+    Use when: your frame quality varies significantly (e.g. mixed seeing
+    conditions over a long session). Requires at least 3 frames.
+
+  Noise-Weighted Mean
+    Estimates the background noise in each frame using Median Absolute
+    Deviation, then weights frames inversely to their noise level. Cleaner
+    frames contribute more; frames taken through cloud are downweighted.
+    Use when: some frames were taken through thin cloud or have varying noise.
+
+  Minimum
+    Returns the lowest pixel value across all frames at each position.
+    Diagnostic use — useful for mapping gradients or finding the darkest sky.
+
+  Maximum
+    Returns the highest pixel value across all frames at each position.
+    Can be used to identify transient objects (satellites, meteors) or for
+    creating star trail images.
+
+── 6.4  STACKING METHOD PARAMETERS ────────────────────────────────────────────
+
+Some methods expose additional parameters:
+
+  Sigma Low / Sigma High  (for Sigma Clipping and Winsorized Sigma)
+    How many standard deviations below (Low) and above (High) the median
+    a pixel must be before it is clipped or clamped. Defaults of 2.5/2.5
+    work well for most datasets. Lower = more aggressive rejection (more
+    pixels removed); higher = more permissive (fewer removed).
+    Typical range: 2.0–3.5
+
+  Reject Low % / Reject High %  (for Percentile Clipping)
+    What percentage of the lowest and highest values at each pixel position
+    to discard. Default 10%/10% is a good starting point. Increase for
+    more aggressive rejection of bad frames or satellite trails.
+    Valid range: 0–49% per side (combined must be less than 100%).
+
+── 6.5  REFERENCE FRAME ────────────────────────────────────────────────────────
+
+The frame that all other frames are aligned to. Default is 0 (the first
+frame loaded). The spinner's maximum is automatically updated to match the
+number of light frames loaded.
+
+For best results, choose a frame that is sharp, well-exposed, and has good
+star coverage. If auto-reject is enabled, rejected frames are removed before
+alignment so the reference frame index may effectively shift.
+
+── 6.6  OUTPUT FILE ────────────────────────────────────────────────────────────
+
+The file path where the stacked result is saved. Defaults to "stacked.fits"
+which, inside the app bundle, resolves to the same directory as your first
+light frame. Click Browse... to choose a specific location and filename.
+
+Supported output formats:
+  - .fits / .fit / .fts — FITS format (recommended for further processing)
+  - .xisf               — XISF format (compatible with PixInsight)
+
+
+================================================================================
+7.  PROCESSING OPTIONS
+================================================================================
+
+All processing options in the Processing section of the Settings panel are
+optional and can be combined freely.
+
+── 7.1  AUTO-REJECT BLURRY/TRAILED FRAMES ─────────────────────────────────────
+
+When enabled, the pipeline measures the quality of each calibrated frame
+before stacking by fitting Gaussian profiles to detected stars. It scores
+each frame on:
+  - FWHM (Full Width at Half Maximum): lower = sharper stars
+  - Eccentricity: lower = rounder stars, higher = trailed or elongated
+  - Star count: more detected stars generally means better SNR
+
+Frames that score significantly worse than the group median are automatically
+rejected and excluded from the stack. The progress log shows each frame's
+scores and whether it was kept or rejected.
+
+Requirements: at least 3 light frames (too few frames for meaningful scoring).
+If rejection would leave fewer than 2 frames, all frames are kept instead.
+
+── 7.2  REMOVE LIGHT POLLUTION GRADIENT ───────────────────────────────────────
+
+Light pollution and vignetting produce a gradual brightness variation across
+the image background — brighter near the horizon or in the direction of city
+lights. This option fits a smooth polynomial surface to the background of the
+final stacked result, then subtracts it, leaving a flat, even background.
+
+Recommended for: suburban or urban imaging sites, moonlit sessions, or any
+target where the background is noticeably brighter on one side.
+
+Note: this operates on the final stacked image. For per-frame gradient removal
+before stacking, use Local Normalisation instead (see 7.3).
+
+── 7.3  LOCAL NORMALISATION (PER-FRAME) ───────────────────────────────────────
+
+Applies the same gradient removal algorithm (see 7.2) to every individual
+frame before it is included in the stack, rather than just the final result.
+
+This is particularly valuable for long multi-hour imaging sessions where sky
+brightness, cloud, or local horizon interference changed significantly during
+the session. Each frame is corrected individually before being combined.
+
+Note: Local Normalisation is slower than post-stack gradient removal (it
+processes every frame). For a single-night session without unusual brightness
+changes, post-stack gradient removal is usually sufficient.
+
+── 7.4  AUTO-CROP STACKING EDGES ──────────────────────────────────────────────
+
+Frame alignment introduces black or NaN-filled borders around the edges of the
+stacked result because different frames cover slightly different regions of
+sky. These borders can cause problems in downstream tools.
+
+When enabled, the pipeline automatically crops the stack to the largest
+rectangular region fully covered by all frames, then adds a small 2-pixel
+safety margin. The crop dimensions are reported in the progress log.
+
+Recommended: on, for most sessions with any tracking error or guiding drift.
+
+── 7.5  DENOISE ────────────────────────────────────────────────────────────────
+
+Applies Non-Local Means (NLM) denoising to the final stacked image. NLM is a
+patch-based algorithm that finds similar regions elsewhere in the image and
+uses them to reduce noise. It is very effective at smoothing grainy background
+areas while preserving star profiles and fine nebula structure.
+
+No model files or GPU are required — it runs entirely on the CPU.
+
+Strength options:
+  Light   — Subtle smoothing. Safest choice; ideal for high SNR stacks.
+  Medium  — Good balance of noise reduction and detail preservation.
+            Recommended default if you enable this option.
+  Strong  — Aggressive smoothing. Best for very noisy short-exposure stacks
+            or datasets with only a handful of frames.
+
+Tip: Denoise is most effective when applied after stacking many frames.
+A stack of 5 frames with Strong denoise will not look as good as a stack of
+50 frames with no denoise. Stack more frames first if possible.
+
+── 7.6  SHARPEN ────────────────────────────────────────────────────────────────
+
+Applies PSF-informed sharpening to the final stacked image. The app first
+measures the average star Full Width at Half Maximum (FWHM) of your aligned
+frames using Gaussian fitting, then applies an unsharp-mask / Richardson-Lucy
+hybrid using that measurement as the kernel size. This produces tighter stars
+and reveals fine structural detail in nebulae.
+
+Strength options:
+  Light   — Subtle sharpening. Safest for any stack; excellent starting point.
+  Medium  — Good balance.
+  Strong  — Aggressive; best for high-SNR stacks with good seeing conditions.
+
+Note: Sharpening amplifies both signal and noise. If your stack is already
+noisy, try using Denoise before Sharpen (the pipeline applies Sharpen first,
+then Denoise).
+
+If Drizzle is also enabled, the FWHM estimate is automatically scaled up to
+account for the doubled pixel scale of the drizzled output.
+
+── 7.7  DRIZZLE (2x RESOLUTION) ───────────────────────────────────────────────
+
+Drizzle is a technique that produces an output image at double the native
+pixel resolution of your sensor. Rather than simply scaling up (which adds
+no new information), drizzle exploits the tiny sub-pixel position differences
+between aligned frames to reconstruct detail beyond the native pixel scale.
+
+How it works:
+  Each input pixel is projected onto a finer output grid with a slightly
+  shrunken "drop" (the pixel footprint). Because each frame is shifted by a
+  sub-pixel amount relative to the others (from natural tracking imperfections
+  and dithering), different frames contribute flux to slightly different output
+  pixels. Averaging over many such contributions reconstructs sub-pixel
+  detail.
+
+The output image is 4x larger in file size (2x in each dimension). This is
+normal and expected.
+
+Works best when:
+  - Your mount or guiding software dithers between frames (recommended).
+    Dithering introduces random sub-pixel offsets, giving the drizzle
+    algorithm more independent samples per output pixel.
+  - You have 15 or more frames (more frames = better sub-pixel sampling).
+  - Your seeing is reasonable (drizzle cannot recover detail lost to bad seeing).
+
+Important: When Drizzle is enabled alongside Auto Plate Solve, the app
+automatically halves the scale hints sent to nova.astrometry.net to account
+for the doubled resolution. This is handled transparently — you do not need
+to adjust your scale hints manually.
+
+── 7.8  AUTO PLATE SOLVE AFTER STACKING ───────────────────────────────────────
+
+When enabled, the app automatically submits the completed stack to
+nova.astrometry.net for plate solving immediately after stacking finishes.
+
+Requirements:
+  - A valid API key entered in the Plate Solve tab.
+  - Scale hints calculated from your focal length and pixel size (strongly
+    recommended — solving without scale hints can take 10+ minutes or fail).
+
+If scale hints are not set when you tick this checkbox, the app will display
+a reminder.
+
+After the auto-solve completes, the WCS astrometry data is automatically
+embedded into your stacked FITS file. The solve result (coordinates, field
+size, objects detected) is also displayed in the progress log.
+
+If no API key is entered, auto plate solve is skipped and the pipeline
+completes with a note in the log.
+
+See Section 10 for full details on plate solving.
+
+
+================================================================================
+8.  RUNNING THE PIPELINE
+================================================================================
+
+── 8.1  STARTING A STACK ──────────────────────────────────────────────────────
+
+Click the "Start Processing" button in the Progress panel at the bottom right.
+
+The button is a large orange-bordered ring labelled "Start Processing".
+At least one light frame must be loaded before it is usable.
+
+── 8.2  THE PROGRESS LOG ──────────────────────────────────────────────────────
+
+The text area in the Progress panel shows a real-time log of every step:
+  - Master frame building or loading
+  - Frame loading and parallel calibration
+  - Debayering (colour cameras only)
+  - Auto frame rejection scores (if enabled)
+  - Alignment progress
+  - Local normalisation (if enabled)
+  - Stacking method used
+  - Auto-crop dimensions (if enabled)
+  - Gradient removal (if enabled)
+  - Sharpening and/or denoising (if enabled)
+  - Output file path and dimensions
+  - Auto plate solve progress (if enabled)
+  - Final "Done!" message
+
+The frame status bar at the very bottom of the window shows the total frame
+count, accepted frame count, and any rejected frame count after the run.
+
+── 8.3  CANCELLING A RUN ──────────────────────────────────────────────────────
+
+While the pipeline is running, the Start Processing button changes to
+"Cancel". Click it to request cancellation. The pipeline checks for
+cancellation between each major stage, so it may take a moment to stop.
+
+── 8.4  WHAT HAPPENS BEHIND THE SCENES ────────────────────────────────────────
+
+The pipeline executes these stages in order:
+
+  Stage 1:  Build master calibration frames
+    - If you provided dark frames, they are median-stacked into a master dark,
+      which is saved to your output folder as master_dark.fits.
+    - If you provided flat frames (and optionally dark flat frames), a master
+      flat is built and saved as master_flat.fits.
+    - If you loaded pre-existing master frames, they are used directly.
+
+  Stage 2:  Load and calibrate light frames (parallel)
+    - All light frames are loaded in parallel across available CPU cores.
+    - Each frame is dark-subtracted and flat-corrected simultaneously.
+    - If camera type is Colour, each frame is debayered from Bayer to RGB.
+
+  Stage 2b: Auto frame rejection (if enabled)
+    - Star profiles are measured for each calibrated frame.
+    - Poor-quality frames (blurry, trailed) are removed from the set.
+
+  Stage 3:  Align frames
+    - All frames are aligned to the chosen reference frame using star pattern
+      matching (triangle similarity, via the astroalign library).
+    - If Local Normalisation is enabled, gradient removal is applied to each
+      aligned frame before stacking.
+
+  Stage 4:  Stack
+    - All aligned frames are combined using the chosen stacking method.
+    - If Drizzle is enabled, drizzle stacking replaces the normal stack.
+
+  Stage 4b: Post-processing
+    - Auto-crop (if enabled)
+    - Gradient removal on the stack (if enabled)
+    - Sharpening (if enabled)
+    - Denoising (if enabled)
+
+  Stage 5:  Save
+    - The result is saved to the output path as FITS (or XISF).
+    - A preview is shown in the Preview panel.
+    - The completion chime sounds.
+    - Auto plate solve runs (if enabled).
+
+
+================================================================================
+9.  PREVIEW PANEL & HISTOGRAM
+================================================================================
+
+The Preview panel fills the top-right portion of the window and shows the
+currently selected file or the most recently stacked result.
+
+The image is automatically stretched using an auto-stretch algorithm
+(midpoint histogram transfer) so faint detail is visible even in a raw,
+linear FITS file. This stretch is display-only — it does not affect the
+saved file, which is always in linear (unstretched) form.
+
+Click any file in the Stacking tab's frame lists to preview it.
+After a stack completes, the stacked result is automatically displayed.
+
+The Histogram panel sits to the right of the Preview panel and shows the
+pixel value distribution of whatever is currently in the Preview. The X axis
+represents pixel brightness (left = dark, right = bright) and the Y axis
+represents how many pixels have each brightness value. For a well-exposed
+stack, the main peak should sit in the lower-left portion of the histogram
+with a tail extending toward brighter values.
+
+
+================================================================================
+10.  PLATE SOLVE TAB
+================================================================================
+
+── 10.1  WHAT IS PLATE SOLVING? ────────────────────────────────────────────────
+
+Plate solving is the process of identifying the exact position of an
+astrophotograph in the sky by matching the pattern of stars in the image
+against a database of known star positions. The result tells you:
+
+  - The Right Ascension (RA) and Declination (Dec) at the centre of the image
+  - The field of view in arcminutes
+  - The pixel scale in arcseconds per pixel
+  - The image orientation (position angle, east of north)
+  - Any named deep-sky objects in the field
+  - Full WCS (World Coordinate System) data for embedding in the FITS file
+
+WCS data embedded in a FITS file allows tools like PixInsight, Siril, ASTAP,
+and Aladin to overlay grids, identify objects, and perform spectrophotometric
+colour calibration (SPCC in PixInsight requires WCS).
+
+Haysey's Astrostacker uses the free nova.astrometry.net service for plate
+solving, which means an internet connection is required for this feature.
+
+── 10.2  GETTING A FREE API KEY ────────────────────────────────────────────────
+
+An API key is strongly recommended. Without it, solving goes into an
+anonymous queue which is much slower (can be 30+ minutes).
+
+  1. Open a browser and go to:  https://nova.astrometry.net
+  2. Click "Sign in / Register" and create a free account.
+  3. Once logged in, go to:     https://nova.astrometry.net/api_help
+  4. Your API key is shown on that page — it looks like:  abcdefghijklmnop
+  5. Copy it and paste it into the API Key field in the Plate Solve tab.
+     Tick "Show key" if you want to verify it.
+
+Your API key is saved automatically when you type it and persists across
+sessions. You only need to enter it once.
+
+── 10.3  SETTING SCALE HINTS (STRONGLY RECOMMENDED) ───────────────────────────
+
+Scale hints tell nova.astrometry.net the approximate pixel scale of your
+image (in arcseconds per pixel). Without them, the solver must search through
+every possible scale — this can take 10–30 minutes. With accurate scale hints,
+it typically solves in 30–90 seconds.
+
+The app includes a Scale Hints calculator. Enter your focal length and camera
+pixel size and click "Calculate & Apply":
+
+  Focal length   — your telescope's focal length in millimetres
+  Pixel size     — your camera's pixel physical size in micrometres (µm)
+
+The app calculates your pixel scale as:
+  arcsec/pixel = (pixel_size_µm ÷ focal_length_mm) × 206.265
+
+Then applies a ±25% tolerance band (e.g. a result of 2.0 arcsec/px becomes
+a range of 1.5–2.5 arcsec/px) to give the solver a comfortable window.
+
+These values are saved automatically when you click Calculate & Apply and
+are reloaded the next time you open the app. You only need to enter them once
+per telescope/camera combination.
+
+You can also type scale bounds manually in the Lower bound and Upper bound
+fields in Arcsec/pixel, Arcmin (field width), or Degrees (field width) units.
+
+── 10.4  FINDING YOUR FOCAL LENGTH ────────────────────────────────────────────
+
+Your telescope focal length is usually printed on:
+  - The focuser drawtube or the OTA tube itself  (e.g. "f=500mm")
+  - The product label on the front or rear of the scope
+  - Your telescope's specification sheet or product page
+
+Common examples:
+  Celestron NexStar 8SE                        — 2032 mm
+  Sky-Watcher Esprit 100ED APO                 — 550 mm
+  William Optics RedCat 51                     — 250 mm
+  Explore Scientific AR102 (f/6.5)             — 663 mm
+  Sky-Watcher 200P (8" f/6)                    — 1200 mm
+  Rowe-Ackermann Schmidt Astrograph (RASA) 8"  — 400 mm
+
+If you use a focal reducer or Barlow lens, you must account for it:
+  Focal reducer ×0.7 at 1000mm scope  →  1000 × 0.7 = 700 mm effective
+  Barlow ×2 at 600mm scope            →  600 × 2 = 1200 mm effective
+
+── 10.5  FINDING YOUR CAMERA PIXEL SIZE ────────────────────────────────────────
+
+Pixel size is a physical property of your camera sensor. It is constant for
+a given camera model and does not change with settings. It is measured in
+micrometres (µm, also written "microns").
+
+Where to find it:
+  - The camera's specification sheet or product page on the manufacturer's
+    website (look for "pixel size", "pixel pitch", or "pixel scale")
+  - Astronomy camera databases such as:
+      https://www.cloudynights.com/   (search your camera model)
+      https://astronomy-imaging-camera.com/  (ZWO cameras)
+
+Common examples:
+  ZWO ASI294MC Pro          — 4.63 µm
+  ZWO ASI2600MC Pro         — 3.76 µm
+  ZWO ASI183MC Pro          — 2.40 µm
+  ZWO ASI071MC Pro          — 4.78 µm
+  Canon EOS R5              — 4.40 µm
+  Canon EOS 600D (T3i)      — 4.30 µm
+  Nikon D7500               — 4.23 µm
+  Sony A7 IV                — 5.95 µm
+  Sony A7S III              — 9.44 µm
+  Altair 26C                — 3.76 µm
+  Player One Neptune-C II   — 2.90 µm
+
+Note: If your camera supports hardware binning (2×2, etc.) and you capture
+in binned mode, multiply the pixel size accordingly:
+  e.g. ZWO ASI294MC Pro at 2×2 binning: 4.63 × 2 = 9.26 µm effective
+
+── 10.6  MANUAL PLATE SOLVING ──────────────────────────────────────────────────
+
+To manually plate solve any image:
+
+  1. Select the image using the Browse... button in the Image section of the
+     Plate Solve tab. (Alternatively, click a file in the Stacking tab —
+     it is automatically set as the plate solve target.)
+  2. Ensure your API key is entered and scale hints are set (see 10.3).
+  3. Click the "Solve" button.
+
+The progress log below the button shows each step:
+  - Connecting to Astrometry.net
+  - Uploading the image (file size shown in MB)
+  - Waiting for a job to be assigned
+  - Solving status with elapsed time
+  - Result retrieval (calibration data, object list, annotations, WCS)
+
+Note: The app uploads a version of your image stretched by 20% in each
+dimension. This improves the readability of the annotated result returned
+by the server. The WCS data is automatically corrected back to the original
+image coordinates before being saved.
+
+While a solve is running, the Solve button becomes a red "Cancel" button.
+Click it to abort.
+
+── 10.7  THE SOLVE RESULT WINDOW ───────────────────────────────────────────────
+
+After a successful solve, a result window opens automatically showing:
+  - The image with named objects (NGC/IC catalogues, named stars) circled
+    and labelled with their common names
+  - A text summary of the solution in the Results box:
+      RA, Dec, orientation, field size, pixel scale, parity, and object list
+
+If you close the result window, you can regenerate the result by solving again.
+
+── 10.8  EMBEDDING WCS INTO ANY FITS FILE ─────────────────────────────────────
+
+After a successful solve, the "Write WCS to FITS..." button becomes active.
+Click it to choose any FITS file and embed the astrometry WCS keywords into it.
+
+This is useful when you want to plate-solve one version of an image (e.g. a
+quick export) and then embed the WCS into a higher-quality stack of the same
+field.
+
+The following WCS keywords are embedded:
+  CTYPE1, CTYPE2  — coordinate axis types (RA---TAN, DEC--TAN)
+  EQUINOX, RADESYS — J2000 / ICRS reference frame
+  CRVAL1, CRVAL2  — RA/Dec of the reference pixel
+  CRPIX1, CRPIX2  — reference pixel coordinates
+  CD1_1 to CD2_2  — CD matrix (rotation + scale in degrees/pixel)
+  OBJCTRA, OBJCTDEC — human-readable RA/Dec (read by PixInsight)
+  PIXSCALE, PA     — pixel scale and position angle
+  PLTSOLVD         — flag indicating a plate solve was performed
+  FLDWIDTH, FLDHGHT — field size in arcminutes
+
+── 10.9  AUTO PLATE SOLVE AFTER STACKING ───────────────────────────────────────
+
+See Section 7.8. WCS data from the auto-solve is embedded into the stacked
+FITS file automatically. You do not need to click "Write WCS to FITS..." again.
+
+
+================================================================================
+11.  MOSAIC TAB
+================================================================================
+
+The Mosaic tab allows you to stitch multiple separately stacked and
+plate-solved panels into a single wide-field image.
+
+Requirements:
+  - Each panel must be a FITS file with WCS astrometry embedded.
+    (Use the Plate Solve tab to plate-solve each panel first.)
+  - At least 2 panels.
+
+How to use:
+  1. Click "Add Panels" and select all the plate-solved FITS files.
+  2. Set the output path using Browse... (defaults to "mosaic.fits").
+  3. Click "Build Mosaic".
+
+The mosaic engine uses the WCS coordinates in each file to determine where
+each panel sits in the sky, then reprojects and blends them into a common
+output grid. The output appears in the Preview panel when complete.
+
+Tips:
+  - Panels should overlap by 10–20% for best blending.
+  - Use the same camera, scope, and settings for all panels for consistent
+    brightness and colour matching.
+  - All panels must be plate-solved with the same or compatible WCS reference
+    frame (J2000/ICRS, which is what nova.astrometry.net provides).
+
+
+================================================================================
+12.  TOOLS MENU
+================================================================================
+
+── 12.1  BLINK COMPARATOR ──────────────────────────────────────────────────────
+
+  Tools > Blink Comparator...
+
+Opens a window that cycles rapidly through all loaded light frames, allowing
+you to visually compare them for quality, trailing, tracking errors, or
+atmospheric turbulence. This is a quick way to identify frames you want to
+remove before stacking.
+
+Controls:
+  < Prev / Next >   — Step through frames manually.
+  Play / Stop       — Automatically cycle through all frames.
+  Speed slider      — Set the blink interval from 100ms to 2000ms.
+                      Drag left for faster blinking, right for slower.
+
+Each frame is auto-stretched for display so all frames appear at consistent
+brightness regardless of their actual pixel values.
+
+Requires at least 2 light frames to be loaded.
+
+── 12.2  VIEW FITS HEADER ──────────────────────────────────────────────────────
+
+  Tools > View FITS Header...
+
+Opens the FITS header viewer showing all metadata keywords stored in a FITS
+file. Tries the currently selected plate solve image first, then the stacked
+output path, then asks you to pick a file.
+
+Useful for checking exposure metadata (EXPTIME, DATE-OBS, TELESCOP, etc.),
+verifying that WCS keywords were embedded correctly, and inspecting camera
+settings recorded during capture.
+
+── 12.3  SETUP WIZARD ──────────────────────────────────────────────────────────
+
+  Tools > Setup Wizard...
+
+Re-opens the first-run Setup Wizard at any time. Useful for updating your
+camera type, API key, focal length, or pixel size. Any values you change are
+saved when you click through to the end of the wizard.
+
+── 12.4  ABOUT ─────────────────────────────────────────────────────────────────
+
+  Tools > About Haysey's Astrostacker...
+
+Displays the app version, build codename, acknowledgements, and a brief
+summary of features. Also shows where to find the GETTING_STARTED.txt beginner
+guide included with the app.
+
+
+================================================================================
+13.  FILE MENU
+================================================================================
+
+── 13.1  SAVE SESSION / LOAD SESSION ───────────────────────────────────────────
+
+  File > Save Session...
+  File > Load Session...
+
+Sessions are JSON files that store all current settings and file paths in one
+place, so you can pick up exactly where you left off, or quickly switch
+between different imaging projects.
+
+What is saved:
+  - All loaded file paths (lights, darks, flats, dark flats, master frames)
+  - Camera type and Bayer pattern
+  - Stacking method and all parameters
+  - Output file path
+  - Reference frame number
+  - All Processing checkbox states (auto-reject, gradient, local norm, etc.)
+  - Denoise and sharpen strengths
+  - Auto plate solve state
+
+Note: Session files store file paths, not the image data. If you move or
+delete the original files, the paths in the session will no longer be valid.
+Files that no longer exist at the stored path are silently skipped when loading.
+
+── 13.2  EXPORT AS TIFF / PNG ──────────────────────────────────────────────────
+
+  File > Export as TIFF...
+  File > Export as PNG...
+
+Exports the currently displayed preview image (the stacked result or the last
+manually previewed frame) as a TIFF or PNG file with automatic stretching
+applied.
+
+  TIFF — 16-bit stretched image. Preserves more tonal range than PNG. Suitable
+         for further processing in Photoshop, GIMP, or Lightroom.
+  PNG  — 8-bit stretched image. Smaller file size. Good for web sharing.
+
+The export stretch is calculated from the current preview's data. For best
+results, export immediately after stacking.
+
+Note: These exports are for sharing and visual inspection. For further
+astrophotography processing, always use the FITS output file — it contains
+the full linear, unprocessed data.
+
+
+================================================================================
+14.  STACKING STRATEGY GUIDE
+================================================================================
+
+── 14.1  CHOOSING THE RIGHT STACKING METHOD ────────────────────────────────────
+
+Quick reference:
+
+  Frames available    Best method(s)
+  ─────────────────── ─────────────────────────────────────────────────────
+  Any number          Median  (safe default — use this if unsure)
+  3–10 frames         Percentile Clipping or Winsorized Sigma
+  10–20 frames        Winsorized Sigma or Percentile Clipping
+  20+ frames          Sigma Clipping (best SNR with good rejection)
+  30+ frames          Sigma Clipping or Weighted Mean (if seeing varied)
+  Varying quality     Weighted Mean (Quality) or Noise-Weighted Mean
+  Very clean data     Mean (Average) — maximum SNR, no rejection needed
+
+If satellite trails or planes are a concern, Sigma Clipping and Percentile
+Clipping are both very effective at removing them. Median also works but
+leaves faint ghost trails at low frame counts.
+
+── 14.2  HOW MANY FRAMES DO I NEED? ────────────────────────────────────────────
+
+Stacking SNR improves with the square root of the number of frames. To halve
+your noise, you need 4× as many frames.
+
+  Frames   SNR improvement over 1 frame
+  ──────── ────────────────────────────
+       2   1.4x
+       5   2.2x
+      10   3.2x
+      20   4.5x
+      50   7.1x
+     100  10.0x
+
+Practical minimums:
+  - Sigma Clipping: needs at least 10 frames for meaningful rejection
+    (15+ recommended for best results).
+  - Percentile Clipping: effective from 5 frames.
+  - Auto-reject: requires at least 3 frames.
+  - Drizzle: benefits from 15+ frames.
+
+── 14.3  CALIBRATION FRAME GUIDE ───────────────────────────────────────────────
+
+  Frame type    Minimum  Recommended  Purpose
+  ──────────────────────────────────────────────────────────────────────────
+  Darks         0        15–20        Remove thermal noise, hot pixels
+  Flats         0        15–20        Remove vignetting, dust donuts
+  Dark Flats    0        10–15        Calibrate flats more accurately
+  Bias          N/A      N/A          (not currently a separate step —
+                                       use Dark Flats if needed)
+
+For modern cooled astronomy cameras at -10°C or colder, darks become much
+less important. For uncooled DSLRs at ambient temperature, darks make a
+significant difference.
+
+Flats are always beneficial if your images show vignetting (darkening toward
+corners) or dust donuts. They require matching the focus position of your
+lights exactly.
+
+── 14.4  COLOUR VS. MONO CAMERAS ───────────────────────────────────────────────
+
+One-shot colour cameras (OSC / Bayer matrix cameras) have a colour filter array
+bonded to the sensor. Each photosite records only one of Red, Green, or Blue
+light. The app uses a process called debayering to reconstruct the full colour
+image from this mosaic pattern.
+
+Pros of OSC: simpler workflow, faster imaging, one camera for all targets.
+Cons of OSC: less efficient use of each photosite (each misses 2/3 of the
+spectrum), colour-sensitive targets like emission nebulae show less Ha signal.
+
+Monochrome cameras have no filter array and record all light with every
+photosite. They are used with separate colour filters (LRGB for broadband,
+or narrowband Ha/OIII/SII for emission nebulae).
+
+For ASV members just starting out, a one-shot colour DSLR or astronomy
+camera is the best choice. Set the app to Colour (Bayer) mode.
+
+── 14.5  DRIZZLE — WHEN TO USE IT ──────────────────────────────────────────────
+
+Drizzle is most effective when:
+  1. You are imaging a high-detail target (galaxies, planetary nebulae, globular
+     clusters) where fine structure is important.
+  2. Your imaging system is "under-sampled" — the apparent size of your star
+     PSF (spread across the atmosphere and optics) spans fewer than 2 pixels.
+     Under-sampling means each seeing disc spreads across fewer than 2 pixels.
+     A rough guide: if your pixel scale is greater than half the seeing disc,
+     you are under-sampled. (e.g. 1.5 arcsec seeing at 1.0 arcsec/px = good
+     candidate for drizzle; 1.5 arcsec seeing at 0.3 arcsec/px = no benefit.)
+  3. You have 15 or more frames and dithering is enabled in your capture
+     software (N.I.N.A., SGP, APT, etc. all support dithering).
+
+Drizzle is NOT recommended when:
+  - You have fewer than 10 frames.
+  - Your capture software does not dither between frames.
+  - Your pixel scale is already very fine relative to your seeing conditions
+    (over-sampled setup — drizzle would produce an artificially sharp but
+    noise-amplified result).
+  - You are time-limited and plan to stack more frames later.
+
+
+================================================================================
+15.  TROUBLESHOOTING
+================================================================================
+
+PROBLEM: The app doesn't start or crashes immediately.
+SOLUTION: On macOS, right-click the app and choose "Open" to bypass
+          Gatekeeper. On Windows, allow it through SmartScreen. On Linux,
+          ensure the AppImage has execute permission (chmod +x).
+
+PROBLEM: My stack is very noisy.
+SOLUTION: Stack more frames. Noise reduces with the square root of frame count.
+          Also try enabling Denoise (Medium strength is a good starting point).
+          Ensure you are using dark frames to remove hot pixel noise.
+
+PROBLEM: Stars in my stack are elongated or trailed.
+SOLUTION: Enable Auto-Reject to remove the worst frames before stacking.
+          Check that your reference frame (Reference Frame spinner) is a sharp,
+          well-tracked frame. Sigma Clipping with a low sigma value (2.0–2.5)
+          may also help by rejecting the trailed pixels statistically.
+
+PROBLEM: Colours look wrong after stacking (e.g. nebulae are blue instead of red).
+SOLUTION: Check the Bayer Pattern setting. For most cameras, RGGB is correct.
+          Try BGGR if colours are swapped. Consult your camera's spec sheet.
+
+PROBLEM: The stacked image has black triangle borders.
+SOLUTION: Enable Auto-Crop Stacking Edges to remove them automatically.
+
+PROBLEM: Plate solve fails with "no solution found".
+SOLUTION: - Check that your scale hints are set and correct (see 10.3).
+          - Ensure your image actually contains detectable stars.
+          - If using Drizzle, the app automatically halves the scale hints —
+            if you are solving a drizzled image manually via the Plate Solve
+            tab, halve your scale bounds manually before clicking Solve.
+          - Try without scale hints first as a diagnostic (the solve will be
+            much slower but confirms whether hints are the issue).
+          - Check that nova.astrometry.net is accessible from your network.
+
+PROBLEM: Plate solving takes more than 15 minutes.
+SOLUTION: Set scale hints (see 10.3). Solving without hints is dramatically
+          slower. Also check your API key is entered — anonymous users wait in
+          a longer queue.
+
+PROBLEM: "Auto plate solve skipped — no API key set" message in the log.
+SOLUTION: Enter your API key in the Plate Solve tab (see 10.2). The key is
+          saved across sessions — you only need to enter it once.
+
+PROBLEM: The pipeline fails with an alignment error.
+SOLUTION: Astroalign needs detectable stars in all frames. Check that:
+          - Your frames are in focus and not massively over/underexposed.
+          - You have at least a few dozen stars in the frame.
+          - All frames are of the same target (different targets cannot be
+            aligned together).
+          For very crowded or very sparse star fields, try a different reference
+          frame (change the Reference Frame spinner).
+
+PROBLEM: The pipeline runs but the output file is blank / all black.
+SOLUTION: This can happen if the stacking method produces no valid pixels
+          (e.g. Sigma Clipping with very aggressive settings on only 3 frames).
+          Try Median instead, then increase frame count.
+
+PROBLEM: I get an error about the master dark or flat being a different size.
+SOLUTION: This is normal and the app handles it automatically by resizing the
+          calibration frame. The log will show a message like "Master dark is
+          4656×3520 but lights are 2328×1760 — resizing to match". No action
+          required.
+
+PROBLEM: Mosaic doesn't stitch correctly or panels are in the wrong position.
+SOLUTION: Each panel must have WCS data embedded. Plate-solve every panel
+          before attempting to build the mosaic. Ensure all panels overlap
+          and were taken with compatible telescope/camera setups.
+
+
+================================================================================
+16.  GLOSSARY
+================================================================================
+
+Arcsecond / Arcminute / Degree
+  Angular measurements of sky area. 1 degree = 60 arcminutes = 3600 arcseconds.
+  The Moon is approximately 30 arcminutes (0.5 degrees) wide.
+
+Bayer Pattern (RGGB, BGGR, etc.)
+  The arrangement of red, green, and blue photosites on a colour camera sensor.
+  The most common is RGGB. Must match your camera's actual sensor layout for
+  correct colour reproduction.
+
+Calibration Frames
+  Auxiliary images used to correct systematic errors in light frames.
+  Dark frames correct thermal noise. Flat frames correct vignetting and dust.
+
+Dark Current
+  Electrons generated by heat in the camera sensor, independent of light.
+  Increases with temperature and exposure duration. Subtracted by dark frames.
+
+Debayer
+  The process of reconstructing a full-colour image from the raw Bayer mosaic
+  pattern produced by a one-shot colour (OSC) camera.
+
+Declination (Dec)
+  One of the two coordinates in the equatorial coordinate system. Declination
+  is analogous to geographic latitude, measured in degrees from -90° to +90°.
+  0° is the celestial equator; +90° is the north celestial pole.
+
+Drizzle
+  A stacking technique that reconstructs an output image at double the native
+  pixel resolution by using sub-pixel position differences between aligned frames.
+  Based on Fruchter & Hook 2002.
+
+FITS (Flexible Image Transport System)
+  The standard file format in astronomy. Stores image data as floating-point
+  arrays along with a text header of metadata keywords. The app reads and
+  writes FITS files.
+
+FWHM (Full Width at Half Maximum)
+  A measure of star size — the width of a star profile at half its peak intensity.
+  Lower FWHM = sharper stars. Measured in pixels.
+
+Hot Pixel
+  A malfunctioning photosite that always reads a very bright value regardless
+  of the actual illumination. Dark subtraction removes most hot pixels.
+
+Light Pollution
+  Artificial sky brightness from city lights, street lamps, etc. Produces an
+  uneven background gradient in astrophotos. Corrected by gradient removal.
+
+Linear / Stretched
+  A linear image has pixel values proportional to the actual amount of light
+  collected. A stretched image has had its tonal range redistributed (usually
+  making faint features more visible). The app saves linear FITS files and
+  displays auto-stretched previews.
+
+Master Dark / Master Flat
+  A stacked combination of multiple individual dark or flat frames. Stacking
+  multiple frames reduces the noise in the calibration frame itself.
+
+NLM (Non-Local Means)
+  A denoising algorithm that estimates each pixel's true value by averaging
+  similar patches found elsewhere in the image. Very effective at preserving
+  fine structure while reducing background noise.
+
+Plate Solving
+  Identifying the precise sky position of an image by matching its star pattern
+  against a reference catalogue. Produces RA, Dec, pixel scale, and WCS data.
+
+PSF (Point Spread Function)
+  The shape that a perfect point source (like a distant star) produces in an
+  image. Characterised by its FWHM and eccentricity. Used for sharpening and
+  frame quality assessment.
+
+Right Ascension (RA)
+  One of the two coordinates in the equatorial coordinate system. Analogous to
+  geographic longitude, but measured in hours (0h to 24h) or degrees (0°–360°).
+
+Seeing
+  The blurring of star images caused by atmospheric turbulence. Measured in
+  arcseconds — lower is better. Typical values: 1–4 arcseconds.
+
+Sigma
+  The standard deviation of a set of values — a measure of how spread out the
+  values are. In sigma clipping, pixels more than N sigma from the median are
+  rejected as outliers.
+
+SNR (Signal-to-Noise Ratio)
+  The ratio of genuine signal (light from your target) to unwanted noise.
+  Higher SNR = cleaner, more detailed image. Stacking N frames improves SNR
+  by a factor of √N compared to a single frame.
+
+Vignetting
+  Darkening toward the edges and corners of an image caused by the optics or
+  filters. Corrected by flat frame calibration.
+
+WCS (World Coordinate System)
+  A standard set of FITS header keywords that describe the mapping from pixel
+  coordinates to sky coordinates. Allows tools like PixInsight and Siril to
+  overlay grids and perform advanced analysis on plate-solved images.
+
+XISF (Extensible Image Serialisation Format)
+  The native file format of PixInsight. Supported by the app for both reading
+  and writing.
+
+
+================================================================================
+       END OF USER MANUAL
+       Haysey's Astrostacker  v1.0.0  Beta Bronze
+       Australian Skywatchers Victoria
+       https://github.com/haysey/astrostacker
+================================================================================
