@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QStyle,
     QTextEdit,
@@ -47,7 +48,18 @@ class PlateSolvePanel(QWidget):
         self._load_api_key()
 
     def _setup_ui(self):
-        layout = QVBoxLayout(self)
+        # Wrap everything in a scroll area so content never gets compressed
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(8)
 
@@ -245,6 +257,9 @@ class PlateSolvePanel(QWidget):
 
         layout.addWidget(results_group)
         layout.addStretch()
+
+        scroll.setWidget(container)
+        outer.addWidget(scroll)
 
     # ── API key persistence ──
 
