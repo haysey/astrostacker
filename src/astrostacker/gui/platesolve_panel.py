@@ -106,9 +106,9 @@ class PlateSolvePanel(QWidget):
 
         # ── FOV Calculator ──────────────────────────────────────────
         calc_label = QLabel(
-            "Enter YOUR telescope focal length and camera pixel size.\n"
-            "These values are unique to your setup — do not guess.\n"
-            "Without this, solving can take 10+ minutes or fail entirely."
+            "Enter your telescope focal length and camera pixel size.\n"
+            "Find both values in your equipment manuals or spec sheets.\n"
+            "Set once — the app remembers them every session."
         )
         calc_label.setWordWrap(True)
         calc_label.setStyleSheet("color: rgba(255,255,255,0.55); font-size: 11px;")
@@ -117,57 +117,29 @@ class PlateSolvePanel(QWidget):
         calc_form = QFormLayout()
         calc_form.setSpacing(6)
 
-        # Camera preset picker
-        self.camera_preset_combo = QComboBox()
-        self.camera_preset_combo.addItem("— Select your camera (optional) —", 0.0)
-        self.camera_preset_combo.addItem("ZWO ASI120MC/MM  (3.75 µm)",   3.75)
-        self.camera_preset_combo.addItem("ZWO ASI183MC/MM  (2.40 µm)",   2.40)
-        self.camera_preset_combo.addItem("ZWO ASI294MC Pro  (4.63 µm)",  4.63)
-        self.camera_preset_combo.addItem("ZWO ASI533MC Pro  (3.76 µm)",  3.76)
-        self.camera_preset_combo.addItem("ZWO ASI1600MC/MM  (3.80 µm)",  3.80)
-        self.camera_preset_combo.addItem("ZWO ASI2600MC Pro  (3.76 µm)", 3.76)
-        self.camera_preset_combo.addItem("ZWO ASI6200MC Pro  (3.76 µm)", 3.76)
-        self.camera_preset_combo.addItem("ZWO ASI071MC Pro  (4.78 µm)",  4.78)
-        self.camera_preset_combo.addItem("ZWO ASI485MC  (2.90 µm)",      2.90)
-        self.camera_preset_combo.addItem("Canon APS-C DSLR  (≈4.30 µm)", 4.30)
-        self.camera_preset_combo.addItem("Canon Full-frame DSLR  (≈6.25 µm)", 6.25)
-        self.camera_preset_combo.addItem("Nikon APS-C DSLR  (≈3.90 µm)", 3.90)
-        self.camera_preset_combo.addItem("Sony APS-C mirrorless  (≈3.90 µm)", 3.90)
-        self.camera_preset_combo.addItem("Sony A7 full-frame  (≈5.95 µm)", 5.95)
-        self.camera_preset_combo.addItem("Other — enter manually below",  0.0)
-        self.camera_preset_combo.setToolTip(
-            "Pick your camera to auto-fill the pixel size below.\n"
-            "If your camera isn't listed, enter the pixel size manually.\n"
-            "Find it in your camera's spec sheet or manual."
-        )
-        self.camera_preset_combo.currentIndexChanged.connect(self._on_camera_preset)
-        calc_form.addRow("Camera", self.camera_preset_combo)
-
         self.focal_length_spin = QSpinBox()
         self.focal_length_spin.setRange(1, 20000)
         self.focal_length_spin.setValue(1)
-        self.focal_length_spin.setSpecialValueText("Enter your focal length")
+        self.focal_length_spin.setSpecialValueText("e.g.  335")
         self.focal_length_spin.setSuffix("  mm")
         self.focal_length_spin.setToolTip(
-            "Your telescope or lens focal length in millimetres.\n"
-            "Find this on your telescope tube or in its manual.\n"
-            "Examples: 50mm camera lens = 50, Small refractor = 400,\n"
-            "SCT 8\" f/10 = 2032, Newtonian 200/1000 = 1000"
+            "Your telescope focal length in millimetres.\n"
+            "Printed on the tube or in the manual."
         )
-        calc_form.addRow("Focal length", self.focal_length_spin)
+        calc_form.addRow("Telescope focal length", self.focal_length_spin)
 
         self.pixel_size_spin = QDoubleSpinBox()
-        self.pixel_size_spin.setRange(0.1, 50.0)
-        self.pixel_size_spin.setValue(3.76)
+        self.pixel_size_spin.setRange(0.01, 50.0)
+        self.pixel_size_spin.setValue(0.01)
         self.pixel_size_spin.setDecimals(2)
+        self.pixel_size_spin.setSpecialValueText("e.g.  4.63")
         self.pixel_size_spin.setSuffix("  µm")
         self.pixel_size_spin.setToolTip(
             "Your camera's pixel size in micrometres (µm).\n"
-            "Pick your camera above to fill this in automatically,\n"
-            "or find the value in your camera's spec sheet or manual.\n"
-            "Do NOT use another camera's value — it must match YOUR camera."
+            "Find this in your camera's spec sheet or manual.\n"
+            "Every camera model has a different value."
         )
-        calc_form.addRow("Pixel size", self.pixel_size_spin)
+        calc_form.addRow("Camera pixel size", self.pixel_size_spin)
 
         hints_layout.addLayout(calc_form)
 
@@ -275,12 +247,6 @@ class PlateSolvePanel(QWidget):
 
     # ── API key persistence ──
 
-    def _on_camera_preset(self, index: int):
-        """Fill the pixel size field when a camera preset is selected."""
-        pixel_um = self.camera_preset_combo.itemData(index)
-        if pixel_um and pixel_um > 0:
-            self.pixel_size_spin.setValue(pixel_um)
-
     def _calculate_scale(self):
         """Calculate arcsec/pixel from focal length + pixel size and apply to bounds."""
         focal_mm = self.focal_length_spin.value()
@@ -305,7 +271,6 @@ class PlateSolvePanel(QWidget):
         settings = QSettings(SETTINGS_ORG, SETTINGS_APP)
         settings.setValue("astrometry/focal_length", focal_mm)
         settings.setValue("astrometry/pixel_size", pixel_um)
-        settings.setValue("astrometry/camera_preset", self.camera_preset_combo.currentIndex())
 
     def _load_api_key(self):
         """Load the saved API key and FOV calculator values from user preferences."""
@@ -318,14 +283,9 @@ class PlateSolvePanel(QWidget):
 
         focal = settings.value("astrometry/focal_length", 1, type=int)
         pixel = settings.value("astrometry/pixel_size", 0.0, type=float)
-        preset_idx = settings.value("astrometry/camera_preset", 0, type=int)
         self.focal_length_spin.setValue(focal)
         if pixel > 0:
             self.pixel_size_spin.setValue(pixel)
-        if preset_idx > 0:
-            self.camera_preset_combo.blockSignals(True)
-            self.camera_preset_combo.setCurrentIndex(preset_idx)
-            self.camera_preset_combo.blockSignals(False)
 
         # Auto-apply scale hints on startup if the user has previously saved
         # their setup. Beginners set it once and never worry again.
