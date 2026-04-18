@@ -93,14 +93,14 @@ def main():
             fill=(red, green, blue, 255),
         )
 
-    # Subtle nebula glow (blue/purple, off-center upper area)
+    # Nebula glow (warm amber/bronze — reflects Beta Bronze release)
     nebula = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     neb_draw = ImageDraw.Draw(nebula)
     for r in range(200, 0, -1):
-        alpha = int(12 * (1 - r / 200))
+        alpha = int(14 * (1 - r / 200))
         neb_draw.ellipse(
             [380 - r, 280 - r, 380 + r, 280 + r],
-            fill=(60, 40, 120, alpha),
+            fill=(120, 70, 20, alpha),
         )
     bg = Image.alpha_composite(bg, nebula)
 
@@ -148,7 +148,7 @@ def main():
         y2 = cy + frame_h // 2
 
         alpha = 50 + i * 25  # progressively brighter
-        color = (100, 160, 255, alpha)
+        color = (205, 127, 50, alpha)  # bronze frames
         # Rounded rectangle outline
         frames_draw.rounded_rectangle(
             [x1, y1, x2, y2],
@@ -187,7 +187,7 @@ def main():
     lines_layer = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     lines_draw = ImageDraw.Draw(lines_layer)
 
-    line_color = (100, 150, 255, 40)
+    line_color = (205, 140, 60, 40)  # bronze constellation lines
     lines_draw.line([gacrux, acrux], fill=line_color, width=1)
     lines_draw.line([mimosa, delta], fill=line_color, width=1)
     # Pointer line
@@ -213,20 +213,20 @@ def main():
 
     bg = Image.alpha_composite(bg, constellation_layer)
 
-    # === Circle border ===
+    # === Circle border (bronze ring — Beta Bronze release) ===
     border_layer = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     border_draw = ImageDraw.Draw(border_layer)
 
-    # Outer ring - subtle blue
+    # Outer ring - bronze
     border_draw.ellipse(
         [10, 10, SIZE - 10, SIZE - 10],
-        outline=(80, 140, 255, 120),
+        outline=(205, 127, 50, 140),
         width=3,
     )
-    # Inner thin ring
+    # Inner thin ring - dimmer bronze
     border_draw.ellipse(
         [18, 18, SIZE - 18, SIZE - 18],
-        outline=(80, 140, 255, 40),
+        outline=(205, 127, 50, 50),
         width=1,
     )
 
