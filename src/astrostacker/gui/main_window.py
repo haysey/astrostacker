@@ -636,6 +636,13 @@ class MainWindow(QMainWindow):
 
         tools_menu.addSeparator()
 
+        manual_action = QAction("Open User Manual...", self)
+        manual_action.setMenuRole(QAction.MenuRole.NoRole)
+        manual_action.triggered.connect(self._open_user_manual)
+        tools_menu.addAction(manual_action)
+
+        tools_menu.addSeparator()
+
         # Setup Wizard — NoRole prevents macOS from auto-promoting it
         # out of the menu into the application menu as "Preferences"
         wizard_action = QAction("Setup Wizard...", self)
@@ -1100,6 +1107,34 @@ class MainWindow(QMainWindow):
                 self.settings_panel.camera_combo.setCurrentIndex(idx)
             # Reload plate solve settings in case wizard saved API key / FOV
             self.platesolve_panel._load_api_key()
+
+    def _open_user_manual(self):
+        """Open USER_MANUAL.txt with the system default text viewer."""
+        import sys
+        exe = Path(sys.executable)
+
+        # Candidate locations depending on frozen/dev and platform
+        candidates = [
+            exe.parent / "USER_MANUAL.txt",                   # Windows / Linux frozen
+            exe.parent.parent.parent.parent / "USER_MANUAL.txt",  # macOS .app frozen
+            Path(__file__).parent.parent.parent.parent.parent / "USER_MANUAL.txt",  # dev
+        ]
+
+        for path in candidates:
+            if path.exists():
+                from PyQt6.QtCore import QUrl
+                from PyQt6.QtGui import QDesktopServices
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+                return
+
+        # Fallback: offer to open the GitHub README instead
+        QMessageBox.information(
+            self,
+            "User Manual",
+            "USER_MANUAL.txt was not found next to the application.\n\n"
+            "You can find the full documentation on GitHub:\n"
+            "https://github.com/haysey/astrostacker"
+        )
 
     def _show_about(self):
         """Show the About dialog."""

@@ -1,10 +1,10 @@
 # Haysey's Astrostacker v1.0.0 — Beta Bronze
 
-A free, easy-to-use astrophotography image stacking application for macOS, Windows, Linux, and Raspberry Pi. Built for members of the Astronomical Society of Victoria (ASV) and the wider amateur astronomy community.
+A free, easy-to-use astrophotography image stacking application for macOS, Windows, and Linux. Built for the amateur astronomy community.
 
 No coding or command-line experience required — just download, unzip, and run.
 
-**New here?** Open `GETTING_STARTED.txt` (bundled with the app) for a friendly step-by-step beginner walkthrough, or run **Help > Setup Wizard** on first launch.
+**New here?** Open `GETTING_STARTED.txt` for a beginner walkthrough, or run **Tools > Setup Wizard** on first launch. Full documentation is in `USER_MANUAL.txt` (both bundled with every download).
 
 ---
 
@@ -35,9 +35,8 @@ The first full release of Haysey's Astrostacker. Everything in one place.
 - Full colour pipeline through calibration, alignment, stacking, and post-processing
 
 **UX:**
-- **First-run Setup Wizard** — guided walkthrough for new users (camera type, plate solving setup, quick-start steps). Re-run any time from Help > Setup Wizard.
-- **Beginner-friendly layout** — advanced settings (Reference Frame, Local Normalisation, Drizzle, Auto Plate Solve) hidden by default behind a "Show advanced settings" toggle
-- **Bundled Getting Started guide** — GETTING_STARTED.txt included in every download, covering the full beginner workflow with common questions
+- **First-run Setup Wizard** — guided walkthrough for new users (camera type, plate solving setup, quick-start steps). Re-run any time from Tools > Setup Wizard.
+- **Bundled documentation** — GETTING_STARTED.txt and USER_MANUAL.txt included in every download, covering the beginner workflow and every advanced feature in detail
 - Drag and drop files or folders directly onto the file panels
 - Folder import — scans an entire directory for supported files
 - Smart settings — only relevant controls are shown for your current configuration
@@ -139,7 +138,6 @@ Download the latest version for your platform:
 | **macOS (Apple Silicon)** | [Hayseys-Astrostacker-macOS-AppleSilicon.zip](https://github.com/haysey/astrostacker/actions) |
 | **macOS (Intel)** | [Hayseys-Astrostacker-macOS-Intel.zip](https://github.com/haysey/astrostacker/actions) |
 | **Linux (64-bit)** | [Hayseys-Astrostacker-Linux-x64.tar.gz](https://github.com/haysey/astrostacker/actions) |
-| **Raspberry Pi** | Run `install_rpi.sh` (see below) |
 
 To download: go to **Actions** > click the latest successful run (green tick) > scroll to **Artifacts** > download for your platform.
 
@@ -261,75 +259,6 @@ If you see a "permission denied" error on the desktop shortcut:
 - Right-click the shortcut on your desktop
 - Click **Properties** (or **Allow Launching**)
 - Tick **Allow executing file as program**
-
----
-
-#### Raspberry Pi (Pi 4 or Pi 5 — 64-bit Raspberry Pi OS)
-
-> **Requirements:** Raspberry Pi 4 (4GB RAM minimum) or Pi 5, running **64-bit Raspberry Pi OS** (Bookworm recommended). This will **not** work on 32-bit Raspberry Pi OS.
-
-> **How do I know if I have 64-bit?** Open a terminal and type `uname -m`. If it says `aarch64` you have 64-bit. If it says `armv7l` you have 32-bit and will need to reinstall the OS.
-
-Raspberry Pi uses a dedicated installer that installs Qt6 from the system package manager — this is more reliable than a pre-built binary on ARM hardware.
-
-**Step 1 — Open a Terminal**
-
-Click the **Terminal** icon in the taskbar at the top of the screen, or go to the Raspberry Pi menu > Accessories > Terminal.
-
-**Step 2 — Run the installer**
-
-Copy and paste each line into the terminal, pressing **Enter** after each one:
-
-```bash
-wget https://raw.githubusercontent.com/haysey/astrostacker/main/install_rpi.sh
-```
-```bash
-chmod +x install_rpi.sh
-```
-```bash
-./install_rpi.sh
-```
-
-> The installer will ask for your password once to install system packages. Type your password (you won't see it as you type) and press Enter.
-
-**Step 3 — Wait for it to finish**
-
-On a Raspberry Pi, the first install takes longer than on a desktop PC — **10 to 20 minutes** is normal because it's compiling some packages for the ARM processor. You'll see it working through 5 steps. Let it run until you see:
-
-```
-Installation complete!
-```
-
-Don't close the terminal window while it's running.
-
-**Step 4 — Launch the app**
-
-Once complete, look for the **Haysey's AstroStacker** icon on your desktop. Double-click it to launch.
-
-Alternatively, type this in the terminal:
-```bash
-~/astrostacker/run.sh
-```
-
-**Updating to a newer version**
-
-Open a terminal and run:
-```bash
-cd ~/astrostacker && git pull
-```
-
-**Troubleshooting**
-
-If the app doesn't open when you double-click the desktop icon:
-- Right-click the icon and choose **Execute** or **Run**
-- Or open a terminal and type `~/astrostacker/run.sh` to see any error messages
-
-If you see errors about missing packages, run the installer again:
-```bash
-./install_rpi.sh
-```
-
-> **Performance note:** A Raspberry Pi 4 (4GB+) or Pi 5 will happily stack 20–30 light frames. Stacking is CPU-bound so it takes longer than a desktop PC — that's expected. For best performance, disable Drizzle and keep frame counts moderate. The Pi 5 is noticeably faster than the Pi 4 for this kind of work.
 
 ---
 
@@ -474,6 +403,10 @@ Once entered, click **Calculate & Apply** and the app works out your image scale
 
 ## Using the Tools Menu
 
+### Open User Manual (Tools > Open User Manual)
+
+Opens `USER_MANUAL.txt` with your system's default text viewer. The manual covers every feature of the app in detail — stacking methods, calibration, plate solving, mosaics, processing options, and a full troubleshooting guide.
+
 ### Blink Comparator (Tools > Blink Comparator)
 
 The blink comparator loads all your light frames and lets you cycle through them one at a time. Use it to:
@@ -536,8 +469,7 @@ TIFF and PNG exports have auto-stretch applied (PixInsight-style screen transfer
 | **macOS** | macOS 11 (Big Sur) | macOS 13+ (Ventura or later) |
 | **Windows** | Windows 10 (64-bit) | Windows 11 |
 | **Linux** | Ubuntu 22.04 / Debian 12 / Mint 21 | Ubuntu 24.04+ |
-| **Raspberry Pi** | Pi 4 (4GB), 64-bit Raspberry Pi OS | Pi 5 (8GB), 64-bit Bookworm |
-| **RAM** | 8 GB (4 GB on Pi) | 16 GB+ |
+| **RAM** | 8 GB | 16 GB+ |
 | **Storage** | 500 MB for the app | + space for your image files |
 
 ---
@@ -568,7 +500,7 @@ When reporting a bug, please include:
 
 ## License
 
-**© 2024 Andrew Hayes. All rights reserved.**
+**© 2025 Andrew Hayes. All rights reserved.**
 
 Haysey's Astrostacker v1.0.0 and all subsequent versions are copyright Andrew Hayes.
 
@@ -580,4 +512,4 @@ See the [LICENSE](LICENSE) file for full terms.
 
 ---
 
-*Built with care for the Astronomical Society of Victoria and the wider astronomy community.*
+*Built for the amateur astronomy community.*

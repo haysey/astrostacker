@@ -1,8 +1,4 @@
-"""About dialog for Haysey's Astrostacker.
-
-Displays version, codename, copyright, license summary, contact
-details, GitHub link, build info, and key library acknowledgements.
-"""
+"""About dialog for Haysey's Astrostacker."""
 
 from __future__ import annotations
 
@@ -18,25 +14,33 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
 from astrostacker.config import APP_CODENAME, APP_NAME, APP_VERSION
 
-# Bronze palette (matches splash screen)
-_BRONZE      = "#CD7F32"
+_BRONZE       = "#CD7F32"
 _BRONZE_LIGHT = "#E8A044"
-_TEXT_DIM    = "#8899AA"
-_TEXT_MAIN   = "#E0E8F0"
-_DIVIDER     = "rgba(255,255,255,0.10)"
-_BG          = "#12151F"
-_CARD        = "#1A1E2E"
+_TEXT_DIM     = "#8899AA"
+_TEXT_MAIN    = "#E0E8F0"
+_DIVIDER      = "rgba(255,255,255,0.10)"
+_BG           = "#12151F"
+_CARD         = "#1A1E2E"
 
 _STYLESHEET = f"""
 QDialog {{
     background-color: {_BG};
     color: {_TEXT_MAIN};
+}}
+QWidget {{
+    background-color: transparent;
+    color: {_TEXT_MAIN};
+}}
+QScrollArea {{
+    border: none;
+    background-color: {_BG};
 }}
 QLabel {{
     color: {_TEXT_MAIN};
@@ -44,7 +48,7 @@ QLabel {{
 }}
 QLabel#dim {{
     color: {_TEXT_DIM};
-    font-size: 11px;
+    font-size: 12px;
 }}
 QLabel#bronze {{
     color: {_BRONZE_LIGHT};
@@ -53,11 +57,6 @@ QLabel#section {{
     color: {_TEXT_DIM};
     font-size: 10px;
     letter-spacing: 1px;
-    text-transform: uppercase;
-}}
-QLabel#link {{
-    color: {_BRONZE_LIGHT};
-    text-decoration: underline;
 }}
 QPushButton {{
     background-color: {_CARD};
@@ -80,9 +79,10 @@ QPushButton:pressed {{
 def _section_label(text: str) -> QLabel:
     lbl = QLabel(text.upper())
     lbl.setObjectName("section")
-    font = QFont()
-    font.setPointSize(10)
-    lbl.setFont(font)
+    f = QFont()
+    f.setPointSize(10)
+    f.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.0)
+    lbl.setFont(f)
     return lbl
 
 
@@ -93,20 +93,45 @@ def _divider() -> QWidget:
     return line
 
 
+def _link_btn(label: str, url: str) -> QPushButton:
+    btn = QPushButton(label)
+    btn.setFlat(True)
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    btn.setStyleSheet(
+        f"color:{_BRONZE_LIGHT}; border:none; text-decoration:underline;"
+        f"padding:0; font-size:12px; background:transparent;"
+    )
+    btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
+    return btn
+
+
 class AboutDialog(QDialog):
-    """Dark-themed About dialog matching the app's visual style."""
+    """About dialog — scrollable, dark-themed, personal branding."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"About {APP_NAME}")
-        self.setFixedWidth(480)
+        self.setMinimumWidth(520)
+        self.setMaximumWidth(600)
+        self.setMinimumHeight(500)
+        self.resize(540, 680)
         self.setModal(True)
         self.setStyleSheet(_STYLESHEET)
         self._build_ui()
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
-        root.setContentsMargins(28, 28, 28, 20)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── Scrollable content area ───────────────────────────────────
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        content = QWidget()
+        root = QVBoxLayout(content)
+        root.setContentsMargins(32, 28, 32, 24)
         root.setSpacing(0)
 
         # ── Icon + name block ─────────────────────────────────────────
@@ -122,12 +147,12 @@ class AboutDialog(QDialog):
         top.addWidget(icon_lbl)
 
         name_col = QVBoxLayout()
-        name_col.setSpacing(2)
+        name_col.setSpacing(4)
 
         app_lbl = QLabel(APP_NAME)
         fn = QFont()
         fn.setFamilies(["SF Pro Display", "Helvetica Neue", "Segoe UI", "Arial"])
-        fn.setPointSize(17)
+        fn.setPointSize(18)
         fn.setBold(True)
         app_lbl.setFont(fn)
         name_col.addWidget(app_lbl)
@@ -151,47 +176,48 @@ class AboutDialog(QDialog):
         top.addLayout(name_col)
         top.addStretch()
         root.addLayout(top)
-        root.addSpacing(20)
+        root.addSpacing(22)
         root.addWidget(_divider())
-        root.addSpacing(16)
+        root.addSpacing(18)
 
         # ── Description ───────────────────────────────────────────────
         desc = QLabel(
-            "A free astrophotography image stacking application for macOS, "
-            "Windows, Linux, and Raspberry Pi. Built for members of the "
-            "Astronomical Society of Victoria (ASV) and the wider amateur "
-            "astronomy community."
+            f"{APP_NAME} is a free astrophotography image stacking application "
+            "for macOS, Windows, and Linux. Built for the amateur astronomy "
+            "community — no coding or command-line experience required."
         )
         desc.setWordWrap(True)
         fd = QFont()
-        fd.setPointSize(12)
+        fd.setPointSize(13)
         desc.setFont(fd)
         root.addWidget(desc)
-        root.addSpacing(10)
+        root.addSpacing(12)
 
-        gs_lbl = QLabel(
-            "New here? Run <b>Help &gt; Setup Wizard</b> for a guided first-run walkthrough, "
-            "or open <b>GETTING_STARTED.txt</b> (bundled with the app) for a full beginner guide."
+        docs_lbl = QLabel(
+            "New here? Run <b>Tools → Setup Wizard</b> for a guided first-run "
+            "walkthrough. <b>GETTING_STARTED.txt</b> and <b>USER_MANUAL.txt</b> "
+            "(bundled with the app) cover the full workflow in detail."
         )
-        gs_lbl.setWordWrap(True)
-        gs_f = QFont()
-        gs_f.setPointSize(11)
-        gs_lbl.setFont(gs_f)
-        gs_lbl.setObjectName("dim")
-        root.addWidget(gs_lbl)
-        root.addSpacing(18)
+        docs_lbl.setWordWrap(True)
+        docs_f = QFont()
+        docs_f.setPointSize(12)
+        docs_lbl.setFont(docs_f)
+        docs_lbl.setObjectName("dim")
+        root.addWidget(docs_lbl)
+        root.addSpacing(22)
         root.addWidget(_divider())
-        root.addSpacing(16)
+        root.addSpacing(18)
 
         # ── Legal ─────────────────────────────────────────────────────
-        root.addWidget(_section_label("License"))
-        root.addSpacing(6)
+        root.addWidget(_section_label("Copyright & Licence"))
+        root.addSpacing(8)
 
-        copy_lbl = QLabel(f"© 2024 Andrew Hayes. All rights reserved.")
+        copy_lbl = QLabel("© 2025 Andrew Hayes. All rights reserved.")
         fc2 = QFont()
-        fc2.setPointSize(12)
+        fc2.setPointSize(13)
         copy_lbl.setFont(fc2)
         root.addWidget(copy_lbl)
+        root.addSpacing(6)
 
         lic_lbl = QLabel(
             "Free for personal, non-commercial astrophotography use. "
@@ -201,120 +227,92 @@ class AboutDialog(QDialog):
         lic_lbl.setWordWrap(True)
         lic_lbl.setObjectName("dim")
         fl = QFont()
-        fl.setPointSize(11)
+        fl.setPointSize(12)
         lic_lbl.setFont(fl)
         root.addWidget(lic_lbl)
-        root.addSpacing(18)
+        root.addSpacing(22)
         root.addWidget(_divider())
-        root.addSpacing(16)
+        root.addSpacing(18)
 
         # ── Contact & links ───────────────────────────────────────────
         root.addWidget(_section_label("Contact & Links"))
-        root.addSpacing(6)
+        root.addSpacing(8)
 
-        links_layout = QVBoxLayout()
-        links_layout.setSpacing(4)
-
-        email_row = QHBoxLayout()
-        email_lbl = QLabel("Licensing enquiries:")
-        email_lbl.setObjectName("dim")
         fe = QFont()
-        fe.setPointSize(11)
-        email_lbl.setFont(fe)
-        email_row.addWidget(email_lbl)
-        email_btn = QPushButton("haysey@haysey.id.au")
-        email_btn.setFlat(True)
-        email_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        email_btn.setStyleSheet(f"color:{_BRONZE_LIGHT}; border:none; text-decoration:underline; padding:0; font-size:11px;")
-        email_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("mailto:haysey@haysey.id.au")))
-        email_row.addWidget(email_btn)
-        email_row.addStretch()
-        links_layout.addLayout(email_row)
+        fe.setPointSize(12)
 
-        bug_row = QHBoxLayout()
-        bug_lbl = QLabel("Bug reports:")
-        bug_lbl.setObjectName("dim")
-        bug_lbl.setFont(fe)
-        bug_row.addWidget(bug_lbl)
-        bug_btn = QPushButton("haysey@haysey.id.au")
-        bug_btn.setFlat(True)
-        bug_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        bug_btn.setStyleSheet(f"color:{_BRONZE_LIGHT}; border:none; text-decoration:underline; padding:0; font-size:11px;")
-        bug_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("mailto:haysey@haysey.id.au")))
-        bug_row.addWidget(bug_btn)
-        bug_row.addStretch()
-        links_layout.addLayout(bug_row)
+        for row_label, display, url in [
+            ("Licensing enquiries:", "haysey@haysey.id.au",           "mailto:haysey@haysey.id.au"),
+            ("Bug reports:",         "haysey@haysey.id.au",           "mailto:haysey@haysey.id.au"),
+            ("Source code:",         "github.com/haysey/astrostacker", "https://github.com/haysey/astrostacker"),
+        ]:
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            lbl = QLabel(row_label)
+            lbl.setObjectName("dim")
+            lbl.setFont(fe)
+            row.addWidget(lbl)
+            btn = _link_btn(display, url)
+            row.addWidget(btn)
+            row.addStretch()
+            root.addLayout(row)
+            root.addSpacing(4)
 
-        gh_row = QHBoxLayout()
-        gh_lbl = QLabel("Source code:")
-        gh_lbl.setObjectName("dim")
-        gh_lbl.setFont(fe)
-        gh_row.addWidget(gh_lbl)
-        gh_btn = QPushButton("github.com/haysey/astrostacker")
-        gh_btn.setFlat(True)
-        gh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        gh_btn.setStyleSheet(f"color:{_BRONZE_LIGHT}; border:none; text-decoration:underline; padding:0; font-size:11px;")
-        gh_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/haysey/astrostacker")))
-        gh_row.addWidget(gh_btn)
-        gh_row.addStretch()
-        links_layout.addLayout(gh_row)
-
-        root.addLayout(links_layout)
         root.addSpacing(18)
         root.addWidget(_divider())
-        root.addSpacing(16)
+        root.addSpacing(18)
 
         # ── Acknowledgements ──────────────────────────────────────────
         root.addWidget(_section_label("Built With"))
-        root.addSpacing(6)
+        root.addSpacing(8)
 
         libs = [
-            ("Astropy",       "FITS I/O and astronomy utilities"),
-            ("Astroalign",    "Automatic frame alignment"),
-            ("PyQt6",         "Graphical interface"),
-            ("scikit-image",  "Star detection and image processing"),
-            ("SciPy",         "PSF fitting and signal processing"),
-            ("NumPy",         "High-performance array operations"),
-            ("Astrometry.net","Online plate solving engine"),
+            ("Astropy",        "FITS I/O and astronomy utilities"),
+            ("Astroalign",     "Automatic frame alignment"),
+            ("PyQt6",          "Graphical interface"),
+            ("scikit-image",   "Star detection and image processing"),
+            ("SciPy",          "PSF fitting and signal processing"),
+            ("NumPy",          "High-performance array operations"),
+            ("Astrometry.net", "Online plate solving engine"),
         ]
-        for lib, desc in libs:
+        fl2 = QFont()
+        fl2.setPointSize(12)
+        fl2b = QFont()
+        fl2b.setPointSize(12)
+        fl2b.setBold(True)
+
+        for lib, lib_desc in libs:
             row = QHBoxLayout()
             row.setSpacing(0)
-            lib_lbl = QLabel(f"{lib}")
-            fl2 = QFont()
-            fl2.setPointSize(11)
-            fl2.setBold(True)
-            lib_lbl.setFont(fl2)
+            lib_lbl = QLabel(lib)
+            lib_lbl.setFont(fl2b)
             row.addWidget(lib_lbl)
-            sep = QLabel(f"  —  {desc}")
+            sep = QLabel(f"  —  {lib_desc}")
             sep.setObjectName("dim")
-            fs = QFont()
-            fs.setPointSize(11)
-            sep.setFont(fs)
+            sep.setFont(fl2)
             row.addWidget(sep)
             row.addStretch()
             root.addLayout(row)
+            root.addSpacing(4)
 
         root.addSpacing(18)
         root.addWidget(_divider())
-        root.addSpacing(16)
+        root.addSpacing(18)
 
         # ── Build / system info ───────────────────────────────────────
         root.addWidget(_section_label("Build Info"))
-        root.addSpacing(6)
+        root.addSpacing(8)
 
-        py_ver = sys.version.split()[0]
+        fb = QFont()
+        fb.setPointSize(12)
+
+        py_ver  = sys.version.split()[0]
         os_info = f"{platform.system()} {platform.release()} ({platform.machine()})"
 
-        for label, value in [
-            ("Platform", os_info),
-            ("Python",   py_ver),
-        ]:
+        for label, value in [("Platform", os_info), ("Python", py_ver)]:
             row = QHBoxLayout()
             lbl = QLabel(f"{label}:")
             lbl.setObjectName("dim")
-            fb = QFont()
-            fb.setPointSize(11)
             lbl.setFont(fb)
             row.addWidget(lbl)
             val = QLabel(value)
@@ -322,22 +320,35 @@ class AboutDialog(QDialog):
             row.addWidget(val)
             row.addStretch()
             root.addLayout(row)
+            root.addSpacing(4)
 
-        root.addSpacing(20)
+        root.addStretch()
 
-        # ── Close button ──────────────────────────────────────────────
-        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        btn_box.rejected.connect(self.accept)
-        btn_box.setStyleSheet("QDialogButtonBox { background: transparent; }")
-        root.addWidget(btn_box, alignment=Qt.AlignmentFlag.AlignRight)
+        scroll.setWidget(content)
+        outer.addWidget(scroll, stretch=1)
+
+        # ── Close button (outside scroll) ─────────────────────────────
+        btn_area = QWidget()
+        btn_area.setStyleSheet(
+            f"background-color: {_BG};"
+            "border-top: 1px solid rgba(255,255,255,0.08);"
+        )
+        btn_layout = QHBoxLayout(btn_area)
+        btn_layout.setContentsMargins(20, 12, 20, 12)
+
+        close_btn = QPushButton("Close")
+        close_btn.setMinimumWidth(90)
+        close_btn.clicked.connect(self.accept)
+        btn_layout.addStretch()
+        btn_layout.addWidget(close_btn)
+
+        outer.addWidget(btn_area)
 
     @staticmethod
     def _load_icon(size: int) -> QPixmap | None:
-        """Load the bundled icon.png, falling back gracefully."""
-        # PyInstaller bundles icon.png into the same dir as the executable
         candidates = [
-            Path(sys.executable).parent / "icon.png",          # frozen app
-            Path(__file__).parent.parent.parent.parent / "icon.png",  # dev
+            Path(sys.executable).parent / "icon.png",
+            Path(__file__).parent.parent.parent.parent / "icon.png",
         ]
         for path in candidates:
             if path.exists():

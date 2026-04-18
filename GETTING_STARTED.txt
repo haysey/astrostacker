@@ -89,7 +89,7 @@ It takes about 2 minutes and helps you get started quickly.
   Page 4 -- You're Ready!
     A quick-start guide. Read through it, then click Let's Go!
 
-You can re-run the wizard any time from Help > Setup Wizard.
+You can re-run the wizard any time from Tools > Setup Wizard.
 
 
 ------------------------------------------------------------------------
@@ -197,12 +197,6 @@ The Settings panel is in the lower right of the main window.
       Denoise: Smooths noisy backgrounds. Start with Light.
 
       Sharpen: Tightens star profiles. Start with Light.
-
-  Advanced Settings
-    Click "Show advanced settings" at the bottom of the Settings panel
-    to reveal additional options (Reference Frame, Local Normalisation,
-    Drizzle, and Auto Plate Solve). These are for experienced users --
-    you do not need them for your first stack.
 
 
 ------------------------------------------------------------------------
@@ -361,10 +355,6 @@ When reporting a problem, please include:
   - Your operating system and version
   - How many frames you were stacking
 
-Full documentation: README.txt (in the same folder as this file)
-
-
-------------------------------------------------------------------------
-Built with care for the Astronomical Society of Victoria
-and the wider amateur astronomy community.
+Full documentation: USER_MANUAL.txt (in the same folder as this file)
+                   or Tools > Open User Manual inside the app.
 ------------------------------------------------------------------------
