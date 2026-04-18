@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 )
 
 from astrostacker.config import APP_NAME, APP_CODENAME, APP_VERSION
+from astrostacker.gui.about_dialog import AboutDialog
 from astrostacker.gui.background import generate_background_pixmap
 from astrostacker.gui.blink_dialog import BlinkDialog
 from astrostacker.gui.file_panel import FilePanel
@@ -629,6 +630,13 @@ class MainWindow(QMainWindow):
         header_action.triggered.connect(self._view_fits_header)
         tools_menu.addAction(header_action)
 
+        # Help menu
+        help_menu = menu_bar.addMenu("Help")
+
+        about_action = QAction(f"About {APP_NAME}...", self)
+        about_action.triggered.connect(self._show_about)
+        help_menu.addAction(about_action)
+
     def _connect_signals(self):
         self.file_panel.file_selected.connect(self._on_file_selected)
         self.progress_panel.start_btn.clicked.connect(self._on_start_cancel)
@@ -1040,6 +1048,11 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", str(e))
 
     # ── FITS header viewer ──
+
+    def _show_about(self):
+        """Show the About dialog."""
+        dlg = AboutDialog(self)
+        dlg.exec()
 
     def _view_fits_header(self):
         """Show FITS header of the currently selected or output file."""
