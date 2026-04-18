@@ -817,6 +817,16 @@ class MainWindow(QMainWindow):
         scale_upper = ps.scale_upper_spin.value() if ps.scale_upper_spin.value() > 0 else None
         scale_units = ps.scale_units_combo.currentData()
 
+        # Drizzle (2x) doubles the image resolution, halving the arcsec/pixel
+        # scale. Adjust hints so nova.astrometry.net searches the right range.
+        if self.settings_panel.get_drizzle() and scale_lower is not None and scale_upper is not None:
+            scale_lower = round(scale_lower / 2.0, 3)
+            scale_upper = round(scale_upper / 2.0, 3)
+            self.progress_panel.log(
+                f"Drizzle active — scale hints halved to "
+                f"{scale_lower}–{scale_upper} arcsec/px for drizzled image."
+            )
+
         self._solve_thread, self._solve_worker = create_solve_thread(
             image_path=output_path,
             api_key=api_key,
