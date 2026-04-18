@@ -192,7 +192,6 @@ class SettingsPanel(QWidget):
 
         # Alignment
         ref_group = QGroupBox("Alignment")
-        self._ref_group = ref_group          # kept for advanced-toggle visibility
         ref_layout = QFormLayout(ref_group)
         ref_layout.setSpacing(10)
         ref_layout.setContentsMargins(12, 20, 12, 8)
@@ -340,14 +339,6 @@ class SettingsPanel(QWidget):
 
         layout.addWidget(proc_group)
 
-        # ── Advanced settings toggle ──────────────────────────────────
-        self._adv_btn = QPushButton("Show advanced settings  ▼")
-        self._adv_btn.setObjectName("secondaryButton")
-        self._adv_btn.setCheckable(True)
-        self._adv_btn.setChecked(False)
-        self._adv_btn.clicked.connect(self._toggle_advanced)
-        layout.addWidget(self._adv_btn)
-
         layout.addStretch()
 
         scroll.setWidget(container)
@@ -355,7 +346,6 @@ class SettingsPanel(QWidget):
 
         self._on_method_changed()
         self._on_camera_changed()
-        self._apply_advanced_visibility(show=False)
 
     # ── Visibility logic ──
 
@@ -369,6 +359,7 @@ class SettingsPanel(QWidget):
     def _on_camera_changed(self):
         is_colour = self.camera_combo.currentData() == CAMERA_COLOUR
         self.bayer_combo.setVisible(is_colour)
+        self.bayer_combo.setEnabled(is_colour)
         label = self.bayer_combo.parent().layout().labelForField(self.bayer_combo)
         if label is not None:
             label.setVisible(is_colour)
@@ -388,20 +379,6 @@ class SettingsPanel(QWidget):
 
     def _on_deconv_toggled(self, checked: bool):
         self.deconv_strength_combo.setEnabled(checked)
-
-    def _toggle_advanced(self, checked: bool) -> None:
-        """Show or hide advanced settings rows."""
-        self._adv_btn.setText(
-            "Hide advanced settings  ▲" if checked else "Show advanced settings  ▼"
-        )
-        self._apply_advanced_visibility(show=checked)
-
-    def _apply_advanced_visibility(self, show: bool) -> None:
-        """Show or hide widgets that are only needed by advanced users."""
-        self._ref_group.setVisible(show)        # Reference Frame group
-        self.local_norm_check.setVisible(show)  # Local normalisation (no label row)
-        self.drizzle_check.setVisible(show)     # Drizzle
-        self.auto_solve_check.setVisible(show)  # Auto plate solve
 
     # ── Browse ──
 

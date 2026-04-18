@@ -268,6 +268,10 @@ class PlateSolvePanel(QWidget):
         focal_mm = self.focal_length_spin.value()
         pixel_um = self.pixel_size_spin.value()
 
+        # Guard: don't calculate with placeholder/unset minimum values
+        if focal_mm <= 1 or pixel_um <= 0.01:
+            return
+
         # Standard formula: arcsec/pixel = (pixel_size_µm / focal_length_mm) × 206.265
         arcsec_per_px = (pixel_um / focal_mm) * 206.265
 
@@ -305,7 +309,7 @@ class PlateSolvePanel(QWidget):
 
         # Auto-apply scale hints on startup if the user has previously saved
         # their setup. Beginners set it once and never worry again.
-        if settings.contains("astrometry/focal_length") and pixel > 0:
+        if focal > 1 and pixel > 0.01:
             self._calculate_scale()
 
     def _save_api_key(self):
