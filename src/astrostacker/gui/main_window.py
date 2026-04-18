@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from astrostacker.config import APP_NAME, APP_VERSION
+from astrostacker.config import APP_NAME, APP_CODENAME, APP_VERSION
 from astrostacker.gui.background import generate_background_pixmap
 from astrostacker.gui.blink_dialog import BlinkDialog
 from astrostacker.gui.file_panel import FilePanel
@@ -489,7 +489,7 @@ class MainWindow(QMainWindow):
         self.showMaximized()
 
     def _setup_ui(self):
-        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION} — {APP_CODENAME}")
         self.setMinimumSize(1280, 820)
         self.setStyleSheet(MACOS_STYLESHEET)
 
@@ -591,7 +591,7 @@ class MainWindow(QMainWindow):
 
         # Frame status bar at the bottom
         self.frame_status_bar = FrameStatusBar()
-        self.frame_status_bar.set_version(APP_VERSION)
+        self.frame_status_bar.set_version(f"{APP_VERSION} — {APP_CODENAME}")
         main_layout.addWidget(self.frame_status_bar)
 
     def _setup_menu_bar(self):

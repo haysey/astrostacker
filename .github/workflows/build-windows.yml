@@ -4,6 +4,7 @@ on:
   workflow_dispatch:  # Manual trigger from GitHub website
   push:
     branches: [main]
+    tags: ['v*']     # Also build + release on version tags
 
 jobs:
   build-windows-x64:
@@ -27,14 +28,16 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller astrostacker.spec --clean
 
-      - name: Include README
-        run: copy README.md "dist\Hayseys Astrostacker\README.txt"
+      - name: Include README and zip
+        run: |
+          copy README.md "dist\Hayseys Astrostacker\README.txt"
+          Compress-Archive -Path "dist\Hayseys Astrostacker" -DestinationPath "Hayseys-Astrostacker-Windows-x64.zip"
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
           name: Hayseys-Astrostacker-Windows-x64
-          path: dist/Hayseys Astrostacker/
+          path: Hayseys-Astrostacker-Windows-x64.zip
           retention-days: 90
 
   build-macos-apple-silicon:
@@ -157,3 +160,53 @@ jobs:
           name: Hayseys-Astrostacker-macOS-Intel
           path: Hayseys-Astrostacker-macOS-Intel.zip
           retention-days: 90
+
+  # Create a GitHub Release with all platform builds when a version tag is pushed
+  release:
+    name: Create GitHub Release
+    needs:
+      - build-windows-x64
+      - build-macos-apple-silicon
+      - build-linux-x64
+      - build-macos-intel
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Haysey's Astrostacker ${{ github.ref_name }} — Beta Bronze"
+          body: |
+            ## Haysey's Astrostacker ${{ github.ref_name }} — Beta Bronze
+
+            First full release of Haysey's Astrostacker. Download the correct build for your platform below.
+
+            ### Download
+            | Platform | File |
+            |----------|------|
+            | 🍎 macOS Apple Silicon (M1/M2/M3/M4) | `Hayseys-Astrostacker-macOS-AppleSilicon.zip` |
+            | 🍎 macOS Intel (pre-2021) | `Hayseys-Astrostacker-macOS-Intel.zip` |
+            | 🪟 Windows x64 | `Hayseys-Astrostacker-Windows-x64.zip` |
+            | 🐧 Linux x86_64 | `Hayseys-Astrostacker-Linux-x64.tar.gz` |
+
+            ### Installation
+            See the [README](https://github.com/haysey/astrostacker#readme) for full installation instructions for each platform.
+
+            ---
+            © Andrew Hayes — free for personal non-commercial use. See LICENSE for details.
+          files: |
+            release-assets/Hayseys-Astrostacker-macOS-AppleSilicon/Hayseys-Astrostacker-macOS-AppleSilicon.zip
+            release-assets/Hayseys-Astrostacker-macOS-Intel/Hayseys-Astrostacker-macOS-Intel.zip
+            release-assets/Hayseys-Astrostacker-Windows-x64/Hayseys-Astrostacker-Windows-x64.zip
+            release-assets/Hayseys-Astrostacker-Linux-x64/Hayseys-Astrostacker-Linux-x64.tar.gz
+          draft: false
+          prerelease: false

@@ -1,4 +1,4 @@
-# Haysey's Astrostacker v0.3.0
+# Haysey's Astrostacker v1.0.0 — Beta Bronze
 
 A free, easy-to-use astrophotography image stacking application for macOS, Windows, Linux, and Raspberry Pi. Built for members of the Astronomical Society of Victoria (ASV) and the wider amateur astronomy community.
 
@@ -6,32 +6,47 @@ No coding or command-line experience required — just download, unzip, and run.
 
 ---
 
-## What's New in v0.3.0
+## What's New in v1.0.0 — Beta Bronze
 
-New stacking methods, denoising, and a full visual polish pass:
+The first full release of Haysey's Astrostacker. Everything in one place.
 
-**New stacking & processing:**
-- **PSF fitting** — proper 2D Gaussian star profile fitting replaces the old HFR measurement. Gives accurate FWHM, eccentricity, and roundness per frame. Frame rejection now catches both blurry AND trailed frames.
-- **PSF-informed sharpening** — tightens star profiles and enhances fine detail using the measured star FWHM. Positive-only unsharp masking ensures nothing is ever darkened. Light/Medium/Strong presets.
-- **5 new stacking methods** — Winsorized Sigma, Percentile Clipping, Weighted Mean (quality-based), Noise-Weighted Mean, plus the existing Mean, Median, Sigma Clip, Min, Max
-- **Non-Local Means denoising** — post-stack noise reduction with Light/Medium/Strong presets. Preserves star profiles and nebula structure while smoothing noisy backgrounds. No model files, no GPU required.
-- **Local normalisation** — per-frame gradient removal before stacking, so gradient differences between frames (moonrise, changing sky glow) don't contaminate the stack
-- **Percentile Clipping controls** — configurable low/high reject percentages when using Percentile Clipping
-- **Weighted Mean** — automatically scores each frame by PSF quality (FWHM + roundness) and weights sharper, rounder frames higher
+**Stacking & processing:**
+- **9 stacking methods** — Mean, Median, Sigma Clip, Winsorized Sigma, Percentile Clip, Weighted Mean, Noise-Weighted Mean, Min, Max
+- **Drizzle stacking** — 2× resolution upscale for well-dithered sub-exposures
+- **PSF fitting** — proper 2D Gaussian star profile measurement per frame. Catches blurry AND trailed frames during auto-rejection.
+- **PSF-informed sharpening** — positive-only unsharp masking keyed to your measured star FWHM. Brightens fine detail without ever creating dark halos. Light / Medium / Strong presets.
+- **Non-Local Means denoising** — post-stack noise reduction. Preserves star profiles and nebula structure. Light / Medium / Strong presets. No GPU required.
+- **Weighted Mean stacking** — automatically weights sharper, rounder frames higher using PSF quality scores.
+- **Local normalisation** — per-frame gradient removal before stacking, so changing sky glow between frames doesn't contaminate the stack
+- **Gradient removal** — post-stack light pollution subtraction
+- **Auto frame rejection** — PSF-based scoring discards blurry and trailed frames before stacking
+- **Auto-crop** — trims alignment edge artifacts from the final stack
 
-**UX improvements:**
-- **Drag and drop** — drag files or folders directly onto the Light, Dark, Flat, and Dark Flat panels
-- **Folder import** — "Add Folder" option scans an entire directory for supported image files
-- **Smart settings** — Sigma parameters only appear when using Sigma Clipping/Winsorized Sigma; Bayer pattern only appears for Colour cameras
-- **Default stacking method** changed to Median — safest for beginners, advanced users can change as needed
-- **Improved startup layout** — all settings visible without scrolling on launch
-- **FITS compatibility fix** — handles BZERO/BSCALE scaled files that previously caused a crash
-- **Windows performance** — disabled UPX compression to avoid startup slowdown and antivirus false positives
+**Calibration:**
+- Dark subtraction, flat correction, dark flat support
+- Automatic master dark and master flat building (saved alongside your output for reuse)
+- Load pre-built master frames to skip rebuilding each session
+- Auto-resize mismatched calibration frames — use masters from a different session or binning without errors
 
-**Visual polish:**
-- Orange focus rings, card-style panels, animated status bar, button press animations
-- Icons on all secondary buttons, orange progress bar and selection highlights
-- Thicker tab indicator with hover highlight
+**Colour cameras:**
+- Automatic Bayer demosaicing (RGGB, GRBG, GBRG, BGGR)
+- Full colour pipeline through calibration, alignment, stacking, and post-processing
+
+**UX:**
+- Drag and drop files or folders directly onto the file panels
+- Folder import — scans an entire directory for supported files
+- Smart settings — only relevant controls are shown for your current configuration
+- Session save/restore — save your file lists and settings, reload them next time
+- Preview panel — view your stacked result before exporting
+- Histogram panel — inspect pixel distribution of the result
+- Plate solve — identify exactly where in the sky your image points (astrometry.net)
+- Mosaic stitching — combine plate-solved panels into a wide-field image
+- FITS header viewer — inspect raw FITS header data
+- Blink comparator — flip between frames to spot trailing, gradients, or artefacts
+- Export as FITS, TIFF, or PNG
+
+**Visual:**
+- Dark theme UI, orange accents, card-style panels, animated progress bar
 
 ---
 
@@ -507,7 +522,7 @@ When reporting a bug, please include:
 
 **© 2024 Andrew Hayes. All rights reserved.**
 
-Haysey's Astrostacker v0.3.0 and all subsequent versions are copyright Andrew Hayes.
+Haysey's Astrostacker v1.0.0 and all subsequent versions are copyright Andrew Hayes.
 
 Free to download and use for personal, non-commercial astrophotography. Repackaging, redistribution, or commercial use of any kind requires prior written permission from the copyright holder.
 
