@@ -6,7 +6,7 @@ import numpy as np
 import json
 from pathlib import Path
 
-from PyQt6.QtCore import QSettings, QThread, Qt
+from PyQt6.QtCore import QSettings, QThread, QTimer, Qt
 from PyQt6.QtGui import QAction, QBrush, QFont, QPalette, QPixmap
 from PyQt6.QtWidgets import (
     QFileDialog,
@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 
 from astrostacker.config import APP_NAME, APP_CODENAME, APP_VERSION
 from astrostacker.gui.about_dialog import AboutDialog
+from astrostacker.gui.wizard import SetupWizard, should_show_wizard
 from astrostacker.gui.background import generate_background_pixmap
 from astrostacker.gui.blink_dialog import BlinkDialog
 from astrostacker.gui.file_panel import FilePanel
@@ -484,6 +485,9 @@ class MainWindow(QMainWindow):
         self._setup_menu_bar()
         self._connect_signals()
         self._size_to_screen()
+        # Show the first-run wizard after the window is ready
+        if should_show_wizard():
+            QTimer.singleShot(200, self._run_wizard)
 
     def _size_to_screen(self):
         """Open maximized to fill the screen."""
@@ -632,6 +636,12 @@ class MainWindow(QMainWindow):
 
         # Help menu
         help_menu = menu_bar.addMenu("Help")
+
+        wizard_action = QAction("Setup Wizard...", self)
+        wizard_action.triggered.connect(self._run_wizard)
+        help_menu.addAction(wizard_action)
+
+        help_menu.addSeparator()
 
         about_action = QAction(f"About {APP_NAME}...", self)
         about_action.triggered.connect(self._show_about)
@@ -1065,6 +1075,18 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Error", str(e))
 
     # ── FITS header viewer ──
+
+    def _run_wizard(self) -> None:
+        """Launch the setup wizard (first-run or on-demand from Help menu)."""
+        wiz = SetupWizard(self)
+        if wiz.exec():
+            # Apply camera type chosen in wizard to the settings panel
+            cam = wiz.camera_type
+            idx = self.settings_panel.camera_combo.findData(cam)
+            if idx >= 0:
+                self.settings_panel.camera_combo.setCurrentIndex(idx)
+            # Reload plate solve settings in case wizard saved API key / FOV
+            self.platesolve_panel._load_api_key()
 
     def _show_about(self):
         """Show the About dialog."""

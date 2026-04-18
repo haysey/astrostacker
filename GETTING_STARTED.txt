@@ -1,0 +1,370 @@
+Haysey's Astrostacker -- Getting Started Guide
+===============================================
+For complete beginners. No experience required.
+
+
+------------------------------------------------------------------------
+WHAT IS IMAGE STACKING?
+------------------------------------------------------------------------
+
+Astrophotography images straight from the camera are dim and noisy.
+A single exposure only captures a fraction of the signal available --
+the rest is buried in random noise from the sensor and sky background.
+
+Stacking solves this by combining many exposures of the same target.
+Each frame captures slightly different random noise, but the real
+signal (stars, nebulae, galaxies) stays in the same place. When you
+average them together, the noise cancels out and the signal builds up.
+
+Rule of thumb:
+  10 frames  -- a noticeable improvement over a single shot
+  20-30 frames -- a good result for most targets
+  50+ frames -- excellent, especially for faint objects
+  100+ frames -- outstanding (deep-sky imaging standard)
+
+
+------------------------------------------------------------------------
+BEFORE YOU BEGIN -- WHAT YOU NEED
+------------------------------------------------------------------------
+
+You need:
+
+  1. A set of light frames
+     These are your main exposures -- the images you took of your
+     target (nebula, galaxy, star cluster, etc.).
+     Format: FITS (.fits, .fit, .fts) or XISF (.xisf)
+
+     Most astronomy capture software (SharpCap, NINA, Ekos, Sequence
+     Generator Pro, FireCapture) saves in FITS format automatically.
+
+  2. Optionally: dark frames and flat frames
+     These calibration frames improve your result but are not required
+     for your first attempt. See the CALIBRATION FRAMES section below.
+
+You do NOT need:
+  - Any programming knowledge
+  - Python installed
+  - Any other software
+
+
+------------------------------------------------------------------------
+STEP 1 -- FIRST LAUNCH: THE SETUP WIZARD
+------------------------------------------------------------------------
+
+The first time you open Haysey's Astrostacker, a Setup Wizard appears.
+It takes about 2 minutes and helps you get started quickly.
+
+  Page 1 -- Welcome
+    Read through the introduction and click Next.
+
+  Page 2 -- Your Camera
+    Choose whether your camera is a colour or monochrome camera.
+
+    COLOUR camera: Canon, Nikon, Sony DSLRs and mirrorless cameras,
+      and any astronomy camera with "colour" or "MC" in the name
+      (e.g. ZWO ASI294MC, ASI1600MC). Your images look like normal
+      photos in colour.
+
+    MONOCHROME camera: A dedicated astronomy camera with a black-and-
+      white sensor, typically used with separate colour filters.
+      Model names often end in "MM" or "M" (e.g. ASI294MM).
+
+    Not sure? If your images look like colour photographs straight
+    from the camera, choose Colour.
+
+  Page 3 -- Plate Solving (Optional)
+    Plate solving identifies exactly where your image points in the sky
+    and labels the objects it contains. This is completely optional.
+
+    To set it up:
+      - Get a free API key at https://nova.astrometry.net
+        (click Sign Up, then find your key on My Profile)
+      - Enter your telescope focal length (printed on the tube,
+        e.g. f=335mm means enter 335)
+      - Enter your camera pixel size (found in your camera's spec sheet
+        or product page -- e.g. ZWO ASI294MC Pro = 4.63 µm)
+
+    You can skip this page and set it up later in the Plate Solve tab.
+
+  Page 4 -- You're Ready!
+    A quick-start guide. Read through it, then click Let's Go!
+
+You can re-run the wizard any time from Help > Setup Wizard.
+
+
+------------------------------------------------------------------------
+STEP 2 -- LOAD YOUR LIGHT FRAMES
+------------------------------------------------------------------------
+
+Light frames are your main exposures. The app needs at least 2 of them
+(though more is always better).
+
+  1. In the Stacking tab on the left sidebar, find the Light Frames
+     section at the top.
+
+  2. Click the Add button (or the small down-arrow for more options).
+
+  3. Navigate to the folder where your images are saved and select
+     them all. You can select multiple files at once with
+     Ctrl+Click (Windows/Linux) or Cmd+Click (Mac).
+
+  4. Alternatively, drag and drop an entire folder directly onto the
+     Light Frames list.
+
+  5. The files appear in the list with a count at the top, e.g.
+     "Light Frames (24)".
+
+Tips:
+  - Only include frames of the same target, same exposure, same camera
+    settings. Do not mix different nights or targets in one stack.
+  - FITS and XISF formats are supported. RAW files from Canon/Nikon
+    are not supported -- use your capture software to save as FITS.
+
+
+------------------------------------------------------------------------
+STEP 3 -- ADD CALIBRATION FRAMES (OPTIONAL)
+------------------------------------------------------------------------
+
+Calibration frames improve your result by removing sensor noise and
+optical imperfections. They are optional but recommended.
+
+  DARK FRAMES
+    Dark frames are exposures taken with the lens cap on (no light),
+    at the same exposure time and camera temperature as your lights.
+    They capture the thermal noise your sensor adds to every image.
+
+    How to take them: Put the lens cap on. Take 10-20 exposures at
+    the same exposure time and ISO/gain as your light frames.
+
+    To load in the app:
+      - In the Dark Frames section, click Add and select your darks.
+      - OR if you already have a pre-built master dark file, click
+        Master Dark... to load just that single file.
+
+  FLAT FRAMES
+    Flat frames are taken of an evenly lit surface (dawn sky, white
+    panel, or dedicated flat panel). They correct for vignetting
+    (dark corners), dust spots, and uneven illumination.
+
+    How to take them: Point your telescope at an evenly lit surface
+    and take 20-30 short exposures (aim for ~40-50% brightness on
+    your histogram).
+
+    To load in the app:
+      - In the Flat Frames section, click Add and select your flats.
+
+You do not need calibration frames for your very first test stack.
+Add them once your basic workflow is working.
+
+
+------------------------------------------------------------------------
+STEP 4 -- CHECK YOUR SETTINGS
+------------------------------------------------------------------------
+
+The Settings panel is in the lower right of the main window.
+
+  Camera Type (top of settings)
+    Set by the wizard, but double-check this matches your camera.
+    Choose Colour (Bayer) for DSLRs and colour astronomy cameras.
+    Choose Mono for dedicated monochrome astronomy cameras.
+
+  Stacking Method
+    For your first stack, leave this set to Median. It is the safest
+    and most reliable option for any number of frames.
+
+    Once you have more experience:
+      Sigma Clip is better for 15+ frames -- it removes satellite
+      trails, planes, and hot pixels automatically.
+
+  Output Path
+    This is where your stacked image will be saved.
+    The default is "stacked.fits" in the same folder you launched from.
+    Click Browse to choose a different location.
+
+  Processing Options
+    These are all optional. For your first stack, leave them all off.
+
+    When you are ready to explore them:
+      Auto-reject blurry/trailed frames: Recommended. Automatically
+        removes poor-quality frames before stacking.
+
+      Remove light pollution gradient: Turn this on if your result
+        has uneven brightness or a bright corner (common in cities).
+
+      Auto-crop stacking edges: Cleans up the dark borders created
+        by frame alignment. Recommended.
+
+      Denoise: Smooths noisy backgrounds. Start with Light.
+
+      Sharpen: Tightens star profiles. Start with Light.
+
+  Advanced Settings
+    Click "Show advanced settings" at the bottom of the Settings panel
+    to reveal additional options (Reference Frame, Local Normalisation,
+    Drizzle, and Auto Plate Solve). These are for experienced users --
+    you do not need them for your first stack.
+
+
+------------------------------------------------------------------------
+STEP 5 -- START STACKING
+------------------------------------------------------------------------
+
+  1. Click the Start Processing button (the large orange outlined button
+     at the bottom of the Settings panel).
+
+  2. The progress log in the centre of the screen shows what the app is
+     doing -- calibrating frames, aligning them, and stacking.
+
+  3. Wait for it to finish. How long it takes depends on:
+       - The number of frames (more = longer)
+       - Your computer speed
+       - Whether post-processing options are enabled
+     Typical times: 2-10 minutes for 20-50 frames on a modern computer.
+
+  4. A chime sounds when processing is complete.
+
+  5. Your stacked image appears in the Preview panel (top right).
+
+
+------------------------------------------------------------------------
+STEP 6 -- VIEW AND EXPORT YOUR RESULT
+------------------------------------------------------------------------
+
+  The Preview Panel (top right)
+    Your stacked image is shown here with an automatic brightness
+    stretch applied so you can see the detail.
+
+    Use the zoom buttons to zoom in and inspect your image.
+
+    Use the stretch toggle (Auto/Linear) to switch between stretched
+    and linear (unstretched) views.
+
+  The Histogram Panel
+    Shows the pixel brightness distribution of your image. Useful for
+    checking exposure and checking that the stack worked correctly.
+
+  Exporting your image
+
+    To save a shareable image (e.g. to post online):
+      File > Export as TIFF  -- best quality, large file
+      File > Export as PNG   -- good quality, smaller file
+
+      Both options apply an automatic brightness stretch so the image
+      looks like a normal photo. This is the file you share.
+
+    Your raw stacked FITS file is also saved automatically to the
+    Output Path you set in the Settings panel. This is the science-
+    quality data file for use in PixInsight, Siril, or other tools.
+
+
+------------------------------------------------------------------------
+STEP 7 -- PLATE SOLVING (OPTIONAL)
+------------------------------------------------------------------------
+
+Plate solving tells you exactly where in the sky your image points.
+The app does this using the free Astrometry.net service online.
+
+Why do it?
+  - Labels the objects in your image (NGC, Messier, stars, etc.)
+  - Embeds WCS coordinates into your FITS file -- required by
+    PixInsight's SPCC (colour calibration) and other tools
+  - Required for mosaic stitching
+
+How to set it up (one time):
+  1. Go to https://nova.astrometry.net and sign up for a free account
+  2. Go to My Profile (top right) and copy your API Key
+  3. Click the Plate Solve tab in the left sidebar
+  4. Paste your API key into the API Key field
+  5. Enter your telescope focal length (mm) and camera pixel size (µm)
+     in the FOV Calculator section, then click Calculate & Apply
+
+How to find your focal length and pixel size:
+  Focal length: printed on the telescope tube (e.g. "f=335mm")
+                or in the manual. The number after "f=" in millimetres.
+  Pixel size:   search "[your camera model] specifications" online and
+                look for Pixel Size or Pixel Pitch (in micrometres, µm).
+                Examples: ZWO ASI294MC Pro = 4.63 µm, Canon 80D = 3.71 µm
+
+How to plate solve:
+  1. Click the Plate Solve tab
+  2. Click Browse and select your stacked FITS file (or it may already
+     be loaded if you just finished stacking)
+  3. Click Solve and wait -- this can take 2-10 minutes online
+  4. Results appear in the log and an annotated image opens
+
+The app remembers your API key, focal length, and pixel size. You only
+need to enter these once.
+
+
+------------------------------------------------------------------------
+TIPS FOR BETTER RESULTS
+------------------------------------------------------------------------
+
+More frames = better noise reduction. 20-30 is a good starting point.
+Take darks. Even 10 dark frames make a noticeable difference.
+Use a consistent setup. Same exposure, gain, temperature each session.
+Auto-reject works best with 6+ frames. With fewer frames, turn it off.
+Gradient removal helps a lot from suburban locations.
+Start with Median stacking. Try Sigma Clip once you have 15+ frames.
+Enable Auto-crop to get a clean rectangular result.
+Try Denoise (Light) to smooth noisy backgrounds without losing detail.
+Try Sharpen (Light) on a good stack to tighten star profiles.
+Save your session (File > Save Session) before closing, so you can
+  reload all your file lists and settings next time.
+
+
+------------------------------------------------------------------------
+COMMON QUESTIONS
+------------------------------------------------------------------------
+
+Q: The stacked image looks blurry or washed out.
+A: This is normal for a raw stack without stretching. The Preview panel
+   applies an auto-stretch to show the detail. For a brighter, sharper-
+   looking image, export using File > Export as TIFF.
+
+Q: My frames failed to align.
+A: Alignment needs at least 5-10 stars in each frame. Very short
+   exposures or heavily overexposed images may not have enough.
+   Try increasing your exposure time, or check your frames aren't
+   totally saturated.
+
+Q: Plate solving failed or timed out.
+A: Make sure you entered your telescope focal length and camera pixel
+   size in the FOV Calculator (Plate Solve tab > Scale Hints section)
+   and clicked Calculate & Apply. Without these, plate solving can
+   take 10+ minutes or fail entirely.
+
+Q: I get a "No stars detected" error.
+A: Your images may be too short (underexposed) or the focus may be
+   very poor. The app needs to detect at least a few stars in each
+   frame for alignment to work.
+
+Q: The result has dark borders around the edges.
+A: This is normal -- frame alignment shifts frames slightly, leaving
+   blank edges. Tick "Auto-crop stacking edges" in the Settings panel
+   to remove them automatically.
+
+Q: Where is my stacked file saved?
+A: To the path shown in Output Path in the Settings panel. The default
+   is "stacked.fits" in the folder where you launched the app.
+
+
+------------------------------------------------------------------------
+GETTING HELP
+------------------------------------------------------------------------
+
+Found a bug or need help? Email: haysey@haysey.id.au
+
+When reporting a problem, please include:
+  - What you were doing when it happened
+  - Any error message from the progress log
+  - Your operating system and version
+  - How many frames you were stacking
+
+Full documentation: README.txt (in the same folder as this file)
+
+
+------------------------------------------------------------------------
+Built with care for the Astronomical Society of Victoria
+and the wider amateur astronomy community.
+------------------------------------------------------------------------

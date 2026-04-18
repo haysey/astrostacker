@@ -167,6 +167,18 @@ class AboutDialog(QDialog):
         fd.setPointSize(12)
         desc.setFont(fd)
         root.addWidget(desc)
+        root.addSpacing(10)
+
+        gs_lbl = QLabel(
+            "New here? Run <b>Help &gt; Setup Wizard</b> for a guided first-run walkthrough, "
+            "or open <b>GETTING_STARTED.txt</b> (bundled with the app) for a full beginner guide."
+        )
+        gs_lbl.setWordWrap(True)
+        gs_f = QFont()
+        gs_f.setPointSize(11)
+        gs_lbl.setFont(gs_f)
+        gs_lbl.setObjectName("dim")
+        root.addWidget(gs_lbl)
         root.addSpacing(18)
         root.addWidget(_divider())
         root.addSpacing(16)

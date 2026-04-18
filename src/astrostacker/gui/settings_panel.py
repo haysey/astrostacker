@@ -1,6 +1,7 @@
 """Settings panel with modern macOS-style controls."""
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -18,6 +19,9 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+_SETTINGS_ORG = "HayseysAstrostacker"
+_SETTINGS_APP = "HayseysAstrostacker"
 
 from astrostacker.config import (
     CAMERA_COLOUR,
@@ -105,8 +109,8 @@ class SettingsPanel(QWidget):
         self.bayer_combo.setEnabled(False)
         self.bayer_combo.setToolTip(
             "The Bayer pattern of your camera sensor.\n"
-            "Most colour astro cameras use RGGB.\n"
-            "Check your camera specs if unsure."
+            "RGGB is the safe default for most colour cameras.\n"
+            "Check your camera's spec sheet if results look wrong."
         )
         camera_layout.addRow("Bayer Pattern", self.bayer_combo)
 
@@ -188,6 +192,7 @@ class SettingsPanel(QWidget):
 
         # Alignment
         ref_group = QGroupBox("Alignment")
+        self._ref_group = ref_group          # kept for advanced-toggle visibility
         ref_layout = QFormLayout(ref_group)
         ref_layout.setSpacing(10)
         ref_layout.setContentsMargins(12, 20, 12, 8)
@@ -225,33 +230,33 @@ class SettingsPanel(QWidget):
 
         self.auto_reject_check = QCheckBox("Auto-reject blurry/trailed frames")
         self.auto_reject_check.setToolTip(
-            "Fits PSF profiles to stars in each frame and automatically\n"
-            "rejects frames with poor FWHM (blurry) or high eccentricity\n"
-            "(trailed/wind shake). Requires at least 3 light frames."
+            "Recommended. Automatically scores each frame for sharpness\n"
+            "and trailing, then removes poor-quality frames before stacking.\n"
+            "Requires at least 3 light frames to work."
         )
         proc_layout.addRow(self.auto_reject_check)
 
         self.gradient_check = QCheckBox("Remove light pollution gradient")
         self.gradient_check.setToolTip(
-            "Fits and subtracts a smooth background surface from the\n"
-            "final stacked result to remove sky gradients from light\n"
-            "pollution, moonlight, or vignetting."
+            "Great for images taken from suburban areas or under moonlight.\n"
+            "Fits and subtracts a smooth background surface from the final\n"
+            "stack to remove uneven sky brightness and vignetting."
         )
         proc_layout.addRow(self.gradient_check)
 
         self.local_norm_check = QCheckBox("Local normalisation (per-frame)")
         self.local_norm_check.setToolTip(
-            "Remove sky gradients from each frame individually BEFORE\n"
-            "stacking. This prevents gradient differences between frames\n"
-            "(e.g. from moonrise or changing sky glow) from contaminating\n"
-            "the stack. More thorough than post-stack gradient removal."
+            "Removes sky gradients from each frame individually before\n"
+            "stacking. Useful for long multi-hour sessions where sky\n"
+            "brightness changed during imaging. More thorough than\n"
+            "post-stack gradient removal, but slower."
         )
         proc_layout.addRow(self.local_norm_check)
 
         self.auto_crop_check = QCheckBox("Auto-crop stacking edges")
         self.auto_crop_check.setToolTip(
-            "Automatically crop the black/NaN borders left by\n"
-            "frame alignment to give a clean rectangular result."
+            "Recommended. Automatically trims the dark borders created\n"
+            "by frame alignment, giving a clean rectangular result."
         )
         proc_layout.addRow(self.auto_crop_check)
 
@@ -319,8 +324,8 @@ class SettingsPanel(QWidget):
 
         self.drizzle_check = QCheckBox("Drizzle (2x resolution)")
         self.drizzle_check.setToolTip(
-            "Use drizzle stacking to produce an image at 2x the native\n"
-            "pixel resolution. Best with well-dithered sub-exposures.\n"
+            "Produces an image at 2x the native pixel resolution.\n"
+            "Works best when your mount dithers between exposures.\n"
             "Output will be 4x larger in file size."
         )
         proc_layout.addRow(self.drizzle_check)
@@ -335,6 +340,14 @@ class SettingsPanel(QWidget):
 
         layout.addWidget(proc_group)
 
+        # ── Advanced settings toggle ──────────────────────────────────
+        self._adv_btn = QPushButton("Show advanced settings  ▼")
+        self._adv_btn.setObjectName("secondaryButton")
+        self._adv_btn.setCheckable(True)
+        self._adv_btn.setChecked(False)
+        self._adv_btn.clicked.connect(self._toggle_advanced)
+        layout.addWidget(self._adv_btn)
+
         layout.addStretch()
 
         scroll.setWidget(container)
@@ -342,6 +355,7 @@ class SettingsPanel(QWidget):
 
         self._on_method_changed()
         self._on_camera_changed()
+        self._apply_advanced_visibility(show=False)
 
     # ── Visibility logic ──
 
@@ -374,6 +388,20 @@ class SettingsPanel(QWidget):
 
     def _on_deconv_toggled(self, checked: bool):
         self.deconv_strength_combo.setEnabled(checked)
+
+    def _toggle_advanced(self, checked: bool) -> None:
+        """Show or hide advanced settings rows."""
+        self._adv_btn.setText(
+            "Hide advanced settings  ▲" if checked else "Show advanced settings  ▼"
+        )
+        self._apply_advanced_visibility(show=checked)
+
+    def _apply_advanced_visibility(self, show: bool) -> None:
+        """Show or hide widgets that are only needed by advanced users."""
+        self._ref_group.setVisible(show)        # Reference Frame group
+        self.local_norm_check.setVisible(show)  # Local normalisation (no label row)
+        self.drizzle_check.setVisible(show)     # Drizzle
+        self.auto_solve_check.setVisible(show)  # Auto plate solve
 
     # ── Browse ──
 

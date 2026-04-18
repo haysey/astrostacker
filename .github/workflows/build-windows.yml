@@ -28,8 +28,10 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller astrostacker.spec --clean
 
-      - name: Include README
-        run: copy README_plain.txt "dist\Hayseys Astrostacker\README.txt"
+      - name: Include docs
+        run: |
+          copy README_plain.txt "dist\Hayseys Astrostacker\README.txt"
+          copy GETTING_STARTED.txt "dist\Hayseys Astrostacker\GETTING_STARTED.txt"
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
@@ -59,10 +61,11 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller astrostacker.spec --clean
 
-      - name: Zip macOS app bundle with README
+      - name: Zip macOS app bundle with docs
         run: |
           cp README_plain.txt dist/README.txt
-          cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-AppleSilicon.zip" "Hayseys Astrostacker.app" "README.txt"
+          cp GETTING_STARTED.txt dist/GETTING_STARTED.txt
+          cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-AppleSilicon.zip" "Hayseys Astrostacker.app" "README.txt" "GETTING_STARTED.txt"
 
       - name: Upload macOS Apple Silicon build
         uses: actions/upload-artifact@v4
@@ -116,6 +119,7 @@ jobs:
       - name: Package Linux app
         run: |
           cp README_plain.txt "dist/Hayseys Astrostacker/README.txt"
+          cp GETTING_STARTED.txt "dist/Hayseys Astrostacker/GETTING_STARTED.txt"
           cd dist && tar -czf "../Hayseys-Astrostacker-Linux-x64.tar.gz" "Hayseys Astrostacker/"
 
       - name: Upload Linux build
@@ -147,10 +151,11 @@ jobs:
       - name: Build with PyInstaller
         run: python -m PyInstaller astrostacker.spec --clean
 
-      - name: Zip macOS app bundle with README
+      - name: Zip macOS app bundle with docs
         run: |
           cp README_plain.txt dist/README.txt
-          cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-Intel.zip" "Hayseys Astrostacker.app" "README.txt"
+          cp GETTING_STARTED.txt dist/GETTING_STARTED.txt
+          cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-Intel.zip" "Hayseys Astrostacker.app" "README.txt" "GETTING_STARTED.txt"
 
       - name: Upload macOS Intel build
         uses: actions/upload-artifact@v4

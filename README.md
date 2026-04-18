@@ -4,6 +4,8 @@ A free, easy-to-use astrophotography image stacking application for macOS, Windo
 
 No coding or command-line experience required — just download, unzip, and run.
 
+**New here?** Open `GETTING_STARTED.txt` (bundled with the app) for a friendly step-by-step beginner walkthrough, or run **Help > Setup Wizard** on first launch.
+
 ---
 
 ## What's New in v1.0.0 — Beta Bronze
@@ -33,6 +35,9 @@ The first full release of Haysey's Astrostacker. Everything in one place.
 - Full colour pipeline through calibration, alignment, stacking, and post-processing
 
 **UX:**
+- **First-run Setup Wizard** — guided walkthrough for new users (camera type, plate solving setup, quick-start steps). Re-run any time from Help > Setup Wizard.
+- **Beginner-friendly layout** — advanced settings (Reference Frame, Local Normalisation, Drizzle, Auto Plate Solve) hidden by default behind a "Show advanced settings" toggle
+- **Bundled Getting Started guide** — GETTING_STARTED.txt included in every download, covering the full beginner workflow with common questions
 - Drag and drop files or folders directly onto the file panels
 - Folder import — scans an entire directory for supported files
 - Smart settings — only relevant controls are shown for your current configuration

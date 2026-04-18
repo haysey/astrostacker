@@ -9,6 +9,10 @@ community.
 No coding or command-line experience required -- just download, unzip,
 and run.
 
+New here? Open GETTING_STARTED.txt (bundled with the app) for a
+friendly step-by-step beginner walkthrough, or run Help > Setup Wizard
+on first launch.
+
 
 ------------------------------------------------------------------------
 WHAT'S NEW IN v1.0.0 -- BETA BRONZE
@@ -47,6 +51,13 @@ Colour cameras:
     and post-processing
 
 UX:
+  - First-run Setup Wizard -- guided walkthrough for new users covering
+    camera type, plate solving setup, and quick-start steps. Re-run
+    any time from Help > Setup Wizard.
+  - Beginner-friendly layout -- advanced settings hidden by default
+    behind a "Show advanced settings" toggle
+  - Bundled Getting Started guide -- GETTING_STARTED.txt included in
+    every download, covering the full beginner workflow
   - Drag and drop files or folders directly onto the file panels
   - Folder import -- scans an entire directory for supported files
   - Smart settings -- only relevant controls are shown
