@@ -1134,16 +1134,20 @@ class MainWindow(QMainWindow):
             )
 
     def _open_user_manual(self):
-        """Open USER_MANUAL.txt with the system default text viewer."""
+        """Open USER_MANUAL.pdf (preferred) or .txt with the system default viewer."""
         import sys
         exe = Path(sys.executable)
 
-        # Candidate locations depending on frozen/dev and platform
-        candidates = [
-            exe.parent / "USER_MANUAL.txt",                   # Windows / Linux frozen
-            exe.parent.parent.parent.parent / "USER_MANUAL.txt",  # macOS .app frozen
-            Path(__file__).parent.parent.parent.parent.parent / "USER_MANUAL.txt",  # dev
+        # Check PDF first, then fall back to .txt — same search locations for both
+        roots = [
+            exe.parent,                                   # Windows / Linux frozen
+            exe.parent.parent.parent.parent,              # macOS .app frozen
+            Path(__file__).parent.parent.parent.parent.parent,  # dev
         ]
+        candidates = (
+            [r / "USER_MANUAL.pdf" for r in roots] +
+            [r / "USER_MANUAL.txt" for r in roots]
+        )
 
         for path in candidates:
             if path.exists():
