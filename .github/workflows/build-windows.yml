@@ -30,6 +30,8 @@ jobs:
 
       - name: Generate PDF manual
         run: python make_manual_pdf.py
+        env:
+          PYTHONIOENCODING: utf-8
 
       - name: Include docs
         run: |

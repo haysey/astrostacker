@@ -806,8 +806,8 @@ def main():
 
     # ── Build ─────────────────────────────────────────────────────────────
     doc.build(story)
-    print(f"Done!  →  {OUT_PDF}")
-    print(f"         {OUT_PDF.stat().st_size / 1024:.0f} KB")
+    print(f"Done!  ->  {OUT_PDF}")
+    print(f"           {OUT_PDF.stat().st_size / 1024:.0f} KB")
 
 
 if __name__ == "__main__":
