@@ -1,7 +1,7 @@
 ================================================================================
        HAYSEY'S ASTROSTACKER  —  USER MANUAL
        Version 1.0.0  Beta Bronze
-       Australian Skywatchers Victoria
+       Not for public release
 ================================================================================
 
 TABLE OF CONTENTS
@@ -81,9 +81,8 @@ TABLE OF CONTENTS
 ================================================================================
 
 Haysey's Astrostacker is a free, open-source astrophotography image stacking
-application developed for the Australian Skywatchers Victoria club. It is
-designed to be approachable for complete beginners while offering the full
-suite of processing tools that experienced imagers expect.
+application. It is designed to be approachable for complete beginners while
+offering the full suite of processing tools that experienced imagers expect.
 
 The core purpose of the app is image stacking: taking many individual
 exposures (called "frames") of the same object and combining them into one
@@ -1066,7 +1065,7 @@ Monochrome cameras have no filter array and record all light with every
 photosite. They are used with separate colour filters (LRGB for broadband,
 or narrowband Ha/OIII/SII for emission nebulae).
 
-For ASV members just starting out, a one-shot colour DSLR or astronomy
+For anyone just starting out, a one-shot colour DSLR or astronomy
 camera is the best choice. Set the app to Colour (Bayer) mode.
 
 ── 14.5  DRIZZLE — WHEN TO USE IT ──────────────────────────────────────────────
@@ -1275,6 +1274,5 @@ XISF (Extensible Image Serialisation Format)
 ================================================================================
        END OF USER MANUAL
        Haysey's Astrostacker  v1.0.0  Beta Bronze
-       Australian Skywatchers Victoria
        https://github.com/haysey/astrostacker
 ================================================================================
