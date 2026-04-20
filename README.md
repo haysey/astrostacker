@@ -184,9 +184,12 @@ To download: go to **Actions** > click the latest successful run (green tick) > 
 
 #### Linux (Ubuntu, Debian, Mint)
 
-> **Tested on:** Ubuntu 22.04, Ubuntu 24.04, Debian 12, Linux Mint 21+
+> **Tested on:** Ubuntu 22.04, Ubuntu 24.04 (x86-64 and ARM64), Debian 12, Linux Mint 21+
+> Works in virtual machines: Parallels Desktop, VMware Fusion/Workstation, VirtualBox
 
 The easiest way to install on Linux is the one-command installer. It handles everything automatically — system libraries, Python environment, desktop shortcut, and launcher.
+
+> 📄 **Full guide (VMs, ARM64, troubleshooting, Raspberry Pi):** see `INSTALL_LINUX.txt` in the repository.
 
 **Step 1 — Open a Terminal**
 

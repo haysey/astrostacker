@@ -1,0 +1,283 @@
+Haysey's AstroStacker -- Linux Installation Guide
+==================================================
+Ubuntu 22.04+  |  Debian 12+  |  Linux Mint 21+
+Raspberry Pi 4/5 (Raspberry Pi OS 64-bit)
+Virtual machines (Parallels, VMware, VirtualBox)
+
+
+------------------------------------------------------------------------
+OVERVIEW
+------------------------------------------------------------------------
+
+Haysey's AstroStacker runs on Linux from source code.  Unlike the
+Windows and macOS editions, there is no single-file download -- the
+installer sets up a Python environment for you automatically.
+
+The process takes about 5-10 minutes depending on your internet speed.
+You will need a terminal, but you only need to type a few commands.
+
+Two installers are provided:
+
+  install_linux.sh  --  Ubuntu, Debian, Linux Mint (x86-64 and ARM64)
+  install_rpi.sh    --  Raspberry Pi 4/5 (Raspberry Pi OS 64-bit)
+
+Not sure which one to use?  See WHICH INSTALLER below.
+
+
+------------------------------------------------------------------------
+WHAT YOU NEED BEFORE YOU START
+------------------------------------------------------------------------
+
+  - Ubuntu 22.04 / Debian 12 / Linux Mint 21 or newer
+    (or Raspberry Pi OS 64-bit Bookworm)
+  - An internet connection
+  - sudo access (the ability to install system packages)
+  - About 1 GB of free disk space for the app and its dependencies
+
+You do NOT need Python pre-installed.  The installer takes care of it.
+
+
+------------------------------------------------------------------------
+WHICH INSTALLER?
+------------------------------------------------------------------------
+
+To check what hardware you are on, open a terminal and run:
+
+    uname -m
+
+Output tells you:
+
+    x86_64   -- Regular PC or laptop (Intel or AMD processor)
+                 Also: Ubuntu in a VM on a Windows or Linux host
+    aarch64  -- ARM 64-bit processor
+                 Also: Ubuntu in Parallels/VMware on an Apple Silicon Mac
+                       Raspberry Pi 4 or 5
+
+For BOTH x86_64 AND aarch64 Ubuntu/Debian desktop installs:
+    --> Use install_linux.sh
+
+For Raspberry Pi 4/5 running Raspberry Pi OS:
+    --> Use install_rpi.sh  (see RASPBERRY PI section at the end)
+
+
+------------------------------------------------------------------------
+INSTALLATION -- UBUNTU / DEBIAN / LINUX MINT
+------------------------------------------------------------------------
+
+Open a terminal.  On Ubuntu: press Ctrl+Alt+T, or search "Terminal"
+in the applications menu.
+
+Step 1 -- Download the installer
+
+    wget https://raw.githubusercontent.com/haysey/astrostacker/main/install_linux.sh
+
+Step 2 -- Make it executable
+
+    chmod +x install_linux.sh
+
+Step 3 -- Run it
+
+    ./install_linux.sh
+
+The installer will:
+
+  [1/5] Install system libraries (Qt6, OpenGL, fonts) via apt
+  [2/5] Download the AstroStacker source code from GitHub
+  [3/5] Create a Python virtual environment and install packages
+  [4/5] Create a launcher script (~/astrostacker/run.sh)
+  [5/5] Create a desktop shortcut and applications menu entry
+
+When it finishes you should see:
+
+  ============================================
+    Installation complete!
+  ============================================
+
+  To run:   ~/astrostacker/run.sh
+  Or find "Haysey's AstroStacker" in your applications menu.
+
+That's it.  See RUNNING THE APP below.
+
+
+------------------------------------------------------------------------
+RUNNING THE APP
+------------------------------------------------------------------------
+
+You have three options:
+
+Option A -- Terminal
+
+    ~/astrostacker/run.sh
+
+Option B -- Applications menu
+
+    Open your applications menu and search for "Haysey's AstroStacker".
+    It appears under Science or Graphics.
+
+Option C -- Desktop shortcut
+
+    If you have a ~/Desktop folder, a shortcut was placed there.
+    Double-click it.  If it opens a text editor instead of launching,
+    right-click it and choose "Allow launching" or "Run as program".
+
+
+------------------------------------------------------------------------
+VIRTUAL MACHINE NOTES (PARALLELS, VMWARE, VIRTUALBOX)
+------------------------------------------------------------------------
+
+AstroStacker works correctly inside Linux virtual machines, including:
+
+  - Parallels Desktop on macOS (Intel and Apple Silicon)
+  - VMware Fusion and Workstation
+  - VirtualBox on any host
+
+The installer's run.sh already includes two settings that prevent common
+display problems on VMs:
+
+  LIBGL_ALWAYS_SOFTWARE=1
+    Forces software OpenGL rendering.  Without this, some VM graphics
+    drivers cause visual glitches in the app's interface.
+
+  QT_ENABLE_HIGHDPI_SCALING=0
+    Prevents text from appearing doubled or blurry on Retina/HiDPI
+    host displays (e.g. running Ubuntu in Parallels on a MacBook Pro).
+
+These settings are set automatically by run.sh.  You do not need to
+do anything.
+
+If you are on a real 4K monitor (not a VM), and the app UI appears
+too small, you can remove the QT_ENABLE_HIGHDPI_SCALING=0 line from
+~/astrostacker/run.sh.
+
+Apple Silicon Macs (Parallels)
+  When Ubuntu runs in Parallels on an Apple Silicon Mac, it is ARM64
+  (aarch64) -- the same architecture as the Mac.  install_linux.sh
+  handles this correctly.  The Raspberry Pi installer should NOT be
+  used in this situation.
+
+
+------------------------------------------------------------------------
+UPDATING TO A NEW VERSION
+------------------------------------------------------------------------
+
+To update AstroStacker to the latest version, open a terminal and run:
+
+    cd ~/astrostacker && git pull
+
+That's it.  The existing virtual environment is reused.  No
+reinstallation needed.
+
+If an update requires new dependencies (rare), re-run the full
+installer instead:
+
+    ./install_linux.sh
+
+
+------------------------------------------------------------------------
+UNINSTALLING
+------------------------------------------------------------------------
+
+The app lives entirely in ~/astrostacker.  To remove it completely:
+
+    rm -rf ~/astrostacker
+    rm -f ~/.local/share/applications/astrostacker.desktop
+    rm -f ~/Desktop/astrostacker.desktop
+
+No system files are modified beyond the apt packages installed in
+Step [1/5] (Qt6 and OpenGL libraries, which other apps may also use).
+
+
+------------------------------------------------------------------------
+TROUBLESHOOTING
+------------------------------------------------------------------------
+
+"sudo: apt-get: command not found"
+  This guide is for Ubuntu, Debian, and Linux Mint.  Other
+  distributions (Fedora, Arch, openSUSE) use different package managers
+  and are not currently supported by the installer.
+
+"git: command not found" or "wget: command not found"
+  These are installed in Step [1/5].  If the step fails before they
+  are installed, install them manually first:
+      sudo apt-get update && sudo apt-get install -y git wget
+
+"The app opens but the text looks doubled or blurry"
+  This is a HiDPI scaling issue, usually on VM displays.
+  Make sure you are launching via ~/astrostacker/run.sh and NOT by
+  running python directly.  The run.sh script sets the environment
+  variables that fix this.
+
+"The app opens but checkboxes are invisible"
+  Update to the latest version (cd ~/astrostacker && git pull).
+  This was fixed in a recent release.
+
+"Processing crashes with 'Killed' and no error message"
+  The Linux kernel terminated the app due to insufficient RAM.
+  Try reducing the number of frames, or close other applications to
+  free memory.  Update to the latest version first (git pull) --
+  recent releases use significantly less memory during processing.
+  As a rough guide: allow ~150 MB per light frame for a colour camera
+  stack.
+
+"Permission denied when running install_linux.sh"
+  Run: chmod +x install_linux.sh  first.
+
+"The desktop shortcut doesn't launch the app"
+  Right-click the shortcut and choose "Allow launching" or
+  "Run as program".  Some desktop environments require this step.
+
+"No space left on device"
+  The full install (app + dependencies) needs about 1 GB.
+  Free up disk space and re-run the installer.
+
+
+------------------------------------------------------------------------
+RASPBERRY PI
+------------------------------------------------------------------------
+
+The Raspberry Pi installer (install_rpi.sh) is designed for:
+  - Raspberry Pi 4 and 5
+  - Raspberry Pi OS 64-bit (Bookworm)
+  - NOT Raspberry Pi OS 32-bit (32-bit is not supported)
+
+It differs from the Ubuntu installer in one important way:
+PyQt6 (the GUI library) has no pre-built packages for ARM Linux on
+the Python package index (PyPI).  The Raspberry Pi installer
+therefore installs PyQt6 from the system package manager (apt)
+instead, and uses a --system-site-packages virtual environment to
+make it available inside the Python environment.
+
+To install on Raspberry Pi:
+
+    wget https://raw.githubusercontent.com/haysey/astrostacker/main/install_rpi.sh
+    chmod +x install_rpi.sh
+    ./install_rpi.sh
+
+The install takes longer on Raspberry Pi (10-20 minutes) because
+some Python packages must be compiled from source.
+
+Performance notes:
+  - A Raspberry Pi 4 (4 GB) can stack 10-20 frames of modest
+    resolution.  Use the Mean stacking method (lower memory than
+    Median) and keep dark/flat frame counts small.
+  - A Raspberry Pi 5 (8 GB) handles larger stacks more comfortably.
+  - Very large stacks (50+ full-resolution colour frames) may run
+    out of memory on 4 GB models.  Reduce the frame count if the
+    app is killed mid-process.
+
+
+------------------------------------------------------------------------
+GETTING HELP
+------------------------------------------------------------------------
+
+Found a bug or stuck on the install?  Email: haysey@haysey.id.au
+
+When asking for help, please include:
+  - Your Linux distribution and version
+    (run: lsb_release -d in a terminal)
+  - Your CPU architecture
+    (run: uname -m)
+  - Whether you are in a virtual machine (and which one)
+  - The exact error message you see
+
+------------------------------------------------------------------------
