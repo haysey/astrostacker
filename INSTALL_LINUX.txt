@@ -117,11 +117,31 @@ The installer works through 5 steps automatically.  You will see:
     [1/5] Installing system packages...
     [sudo] password for yourname:
 
+Step [1/5] can produce a lot of output on a fresh Ubuntu install.
+This is normal -- Ubuntu is also updating system packages (Python,
+graphics libraries, git, etc.) at the same time.  You may see:
+
+  - Many lines of "Preparing to unpack..." and "Setting up..."
+    These are system library updates.  Ignore them.
+
+  - SyntaxWarning messages from hplip, rhythmbox, or other apps
+    These come from Ubuntu's own pre-installed software, not from
+    AstroStacker.  They are harmless -- ignore them.
+
+  - "A reboot is required to replace the running dbus-daemon."
+    A background system service was updated.  You do not need to
+    reboot before running AstroStacker -- this can wait.
+
+  - "User sessions running outdated binaries"
+    Normal on a freshly updated system.  Ignore it.
+
+Once [1/5] finishes, the remaining steps are quick and quiet:
+
     [2/5] Getting source code...
     Cloning into '/home/yourname/astrostacker'...
-    remote: Enumerating objects: 854, done.
+    remote: Enumerating objects: 857, done.
     ...
-    Resolving deltas: 100% (483/483), done.
+    Resolving deltas: 100% (485/485), done.
 
     [3/5] Setting up Python environment...
       Installing Python packages...
@@ -153,8 +173,9 @@ In the terminal, type:
     ~/astrostacker/run.sh
 
 The app will open.  On a brand new machine, the Setup Wizard launches
-automatically to walk you through the initial configuration (camera
-type, telescope details, etc.).  It takes about 2 minutes.
+automatically over the top of the main window.  It walks you through
+the initial configuration (camera type, telescope details, etc.) in
+4 short steps.  It takes about 2 minutes.
 
 If the wizard does not appear automatically (for example, if you
 previously had AstroStacker installed on this machine), you can open
