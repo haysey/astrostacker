@@ -184,9 +184,11 @@ class SetupWizard(QDialog):
 
         root.addWidget(header)
 
-        # Page container
+        # Page container — explicit background so Linux compositors don't bleed
+        # the parent window through (transparent renders incorrectly on some
+        # Linux/VM display drivers).
         self._page_area = QWidget()
-        self._page_area.setStyleSheet("background: transparent;")
+        self._page_area.setStyleSheet("background: #0f0f19;")
         self._page_layout = QVBoxLayout(self._page_area)
         self._page_layout.setContentsMargins(32, 24, 32, 20)
 
@@ -206,7 +208,7 @@ class SetupWizard(QDialog):
         nav = QWidget()
         nav.setFixedHeight(62)
         nav.setStyleSheet(
-            "background: rgba(0,0,0,0.25);"
+            "background: #0a0a12;"
             "border-top: 1px solid rgba(255,255,255,0.07);"
         )
         nl = QHBoxLayout(nav)

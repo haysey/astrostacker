@@ -91,6 +91,17 @@ cat > "$APP_DIR/run.sh" << 'LAUNCHER'
 #!/usr/bin/env bash
 # Launch Haysey's AstroStacker
 cd "$(dirname "$0")"
+
+# Use software OpenGL rendering — avoids display glitches on VMs and
+# systems with minimal GPU drivers (has negligible impact on real hardware).
+export LIBGL_ALWAYS_SOFTWARE=1
+
+# Disable Qt HiDPI auto-scaling — prevents text ghosting on VM displays
+# (e.g. Ubuntu in Parallels/VirtualBox on a Retina Mac).
+# Remove this line if you are on a real HiDPI display (4K monitor) and
+# the UI appears too small.
+export QT_ENABLE_HIGHDPI_SCALING=0
+
 source venv/bin/activate
 python -m astrostacker.main
 LAUNCHER

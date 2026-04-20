@@ -411,6 +411,23 @@ MACOS_STYLESHEET = """
     QCheckBox::indicator {
         width: 18px;
         height: 18px;
+        border-radius: 4px;
+    }
+    QCheckBox::indicator:unchecked {
+        border: 2px solid rgba(255, 255, 255, 0.25);
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+    QCheckBox::indicator:unchecked:hover {
+        border-color: #E8A044;
+        background-color: rgba(232, 160, 68, 0.10);
+    }
+    QCheckBox::indicator:checked {
+        border: 2px solid #E8A044;
+        background-color: #E8A044;
+    }
+    QCheckBox::indicator:checked:hover {
+        border-color: #CD7F32;
+        background-color: #CD7F32;
     }
 
     /* ── Menus (Add button dropdown, etc) ── */
