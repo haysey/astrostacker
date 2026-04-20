@@ -355,6 +355,6 @@ When reporting a problem, please include:
   - Your operating system and version
   - How many frames you were stacking
 
-Full documentation: USER_MANUAL.txt (in the same folder as this file)
+Full documentation: USER_MANUAL.pdf (in the same folder as this file)
                    or Tools > Open User Manual inside the app.
 ------------------------------------------------------------------------

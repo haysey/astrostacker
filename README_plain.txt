@@ -9,7 +9,7 @@ and run.
 
 New here? Open GETTING_STARTED.txt for a step-by-step beginner guide,
 or run Tools > Setup Wizard on first launch.
-Full documentation: USER_MANUAL.txt (bundled with every download).
+Full documentation: USER_MANUAL.pdf (bundled with every download).
 
 
 ------------------------------------------------------------------------
@@ -52,7 +52,7 @@ UX:
   - First-run Setup Wizard -- guided walkthrough for new users covering
     camera type, plate solving setup, and quick-start steps. Re-run
     any time from Tools > Setup Wizard.
-  - Bundled GETTING_STARTED.txt and USER_MANUAL.txt included in every
+  - Bundled GETTING_STARTED.txt and USER_MANUAL.pdf included in every
     download, covering the beginner workflow and all advanced features
   - Drag and drop files or folders directly onto the file panels
   - Folder import -- scans an entire directory for supported files
@@ -414,8 +414,16 @@ TOOLS MENU
 ------------------------------------------------------------------------
 
 Open User Manual (Tools > Open User Manual)
-  Opens USER_MANUAL.txt with your system's text viewer. The full 16-section
-  manual covers every feature of the app in detail.
+  Opens USER_MANUAL.pdf with your system's default PDF viewer. The full
+  16-section manual covers every feature of the app in detail.
+
+Setup Wizard (Tools > Setup Wizard)
+  Re-runs the first-launch Setup Wizard. Use this if you want to change
+  your camera type or review the initial configuration steps.
+
+Reset Setup Wizard (Tools > Reset Setup Wizard)
+  Clears the wizard-completed flag so the wizard appears again on next
+  launch. Useful if you want a completely fresh start.
 
 Blink Comparator (Tools > Blink Comparator)
   Loads all your light frames and lets you cycle through them one at a

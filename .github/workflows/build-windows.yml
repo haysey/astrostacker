@@ -37,7 +37,6 @@ jobs:
         run: |
           copy README_plain.txt "dist\Hayseys Astrostacker\README.txt"
           copy GETTING_STARTED.txt "dist\Hayseys Astrostacker\GETTING_STARTED.txt"
-          copy USER_MANUAL.txt "dist\Hayseys Astrostacker\USER_MANUAL.txt"
           copy USER_MANUAL.pdf "dist\Hayseys Astrostacker\USER_MANUAL.pdf"
 
       - name: Upload Windows build
@@ -75,9 +74,8 @@ jobs:
         run: |
           cp README_plain.txt dist/README.txt
           cp GETTING_STARTED.txt dist/GETTING_STARTED.txt
-          cp USER_MANUAL.txt dist/USER_MANUAL.txt
           cp USER_MANUAL.pdf dist/USER_MANUAL.pdf
-          cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-AppleSilicon.zip" "Hayseys Astrostacker.app" "README.txt" "GETTING_STARTED.txt" "USER_MANUAL.txt" "USER_MANUAL.pdf"
+          cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-AppleSilicon.zip" "Hayseys Astrostacker.app" "README.txt" "GETTING_STARTED.txt" "USER_MANUAL.pdf"
 
       - name: Upload macOS Apple Silicon build
         uses: actions/upload-artifact@v4
@@ -135,7 +133,6 @@ jobs:
         run: |
           cp README_plain.txt "dist/Hayseys Astrostacker/README.txt"
           cp GETTING_STARTED.txt "dist/Hayseys Astrostacker/GETTING_STARTED.txt"
-          cp USER_MANUAL.txt "dist/Hayseys Astrostacker/USER_MANUAL.txt"
           cp USER_MANUAL.pdf "dist/Hayseys Astrostacker/USER_MANUAL.pdf"
           cd dist && tar -czf "../Hayseys-Astrostacker-Linux-x64.tar.gz" "Hayseys Astrostacker/"
 
@@ -175,9 +172,8 @@ jobs:
         run: |
           cp README_plain.txt dist/README.txt
           cp GETTING_STARTED.txt dist/GETTING_STARTED.txt
-          cp USER_MANUAL.txt dist/USER_MANUAL.txt
           cp USER_MANUAL.pdf dist/USER_MANUAL.pdf
-          cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-Intel.zip" "Hayseys Astrostacker.app" "README.txt" "GETTING_STARTED.txt" "USER_MANUAL.txt" "USER_MANUAL.pdf"
+          cd dist && zip -r -y "../Hayseys-Astrostacker-macOS-Intel.zip" "Hayseys Astrostacker.app" "README.txt" "GETTING_STARTED.txt" "USER_MANUAL.pdf"
 
       - name: Upload macOS Intel build
         uses: actions/upload-artifact@v4
