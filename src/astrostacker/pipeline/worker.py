@@ -67,6 +67,7 @@ def create_worker_thread(config: PipelineConfig) -> tuple[QThread, PipelineWorke
         (QThread, PipelineWorker) tuple. The worker is moved to the thread.
     """
     thread = QThread()
+    thread.setStackSize(16 * 1024 * 1024)  # 16 MB — LAPACK needs > default 512 KB
     worker = PipelineWorker(config)
     worker.moveToThread(thread)
 

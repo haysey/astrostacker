@@ -74,6 +74,7 @@ def create_solve_thread(
         (QThread, SolveWorker) - worker is moved to the thread.
     """
     thread = QThread()
+    thread.setStackSize(16 * 1024 * 1024)  # 16 MB — LAPACK needs > default 512 KB
     worker = SolveWorker(
         image_path=image_path,
         api_key=api_key,

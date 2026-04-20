@@ -38,6 +38,7 @@ def create_mosaic_thread(
     panel_paths: list[str], output_path: str = ""
 ) -> tuple[QThread, MosaicWorker]:
     thread = QThread()
+    thread.setStackSize(16 * 1024 * 1024)  # 16 MB — LAPACK needs > default 512 KB
     worker = MosaicWorker(panel_paths, output_path)
     worker.moveToThread(thread)
     thread.started.connect(worker.run)
