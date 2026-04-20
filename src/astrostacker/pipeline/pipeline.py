@@ -11,7 +11,10 @@ import numpy as np
 
 from concurrent.futures import ThreadPoolExecutor
 
-from astrostacker.alignment.align import align_frames
+from astrostacker.alignment.align import (
+    _normalise_for_alignment,
+    _align_single_frame,
+)
 from astrostacker.calibration.calibrate import calibrate_light, prepare_flat_divisor
 from astrostacker.calibration.master_frames import build_master_dark, build_master_flat
 from astrostacker.config import CAMERA_COLOUR, CAMERA_MONO
@@ -215,22 +218,21 @@ class Pipeline:
         # Free raw lights to reduce peak memory
         del lights
 
-        # Stage 2b: Debayer colour camera frames (parallel across cores)
+        # Stage 2b: Debayer colour camera frames
+        # In-place sequential conversion: each mono frame is replaced by
+        # its RGB version one at a time.  The old (small) mono array is
+        # freed as soon as its slot is overwritten, so peak extra RAM is
+        # just one new RGB frame (~140 MB) rather than an entire second
+        # RGB list (~5 GB extra spike with the previous parallel approach).
         if self.config.camera_type == CAMERA_COLOUR:
             self._report(
-                f"Debayering {n_frames} frames ({self.config.bayer_pattern}) "
-                f"across {workers} cores..."
+                f"Debayering {n_frames} frames ({self.config.bayer_pattern})..."
             )
             pattern = self.config.bayer_pattern
-
-            def _debayer_one(frame):
-                if frame.ndim == 2:
-                    return debayer(frame, pattern)
-                return frame
-
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                calibrated = list(pool.map(_debayer_one, calibrated))
-            self._report_progress(n_frames, n_frames, "Debayering")
+            for i in range(n_frames):
+                if calibrated[i].ndim == 2:
+                    calibrated[i] = debayer(calibrated[i], pattern)
+                self._report_progress(i + 1, n_frames, "Debayering")
             self._check_cancel()
             self._report(f"Debayer complete — frames are now RGB {calibrated[0].shape}")
         else:
@@ -268,17 +270,71 @@ class Pipeline:
         self.accepted_count = len(calibrated)
 
         # Stage 3: Align calibrated frames
+        # Sequential free-as-you-go alignment: each input frame's slot in
+        # the calibrated list is set to None immediately after it has been
+        # aligned, allowing Python's reference counting to free that array
+        # before the next one is processed.
+        #
+        # Memory profile:
+        #   Parallel (old): input list (5 GB) + full output list (5 GB)
+        #                   = 10 GB peak at completion
+        #   Sequential (new): at any point, (N - i) input frames +
+        #                     i output frames = always N frames = ~5 GB
+        #
+        # The trade-off is losing parallel alignment across CPU cores.
+        # On memory-constrained machines (VMs, laptops) correctness
+        # matters more than the ~2-4× parallel speedup.
         self._report("Aligning frames...")
+        n_calib = len(calibrated)
+        ref_idx = min(self.config.reference_frame, n_calib - 1)
+        reference = calibrated[ref_idx]
+        is_color = reference.ndim == 3
 
-        def align_progress(current, total):
+        if is_color:
+            ref_lum = _normalise_for_alignment(np.mean(reference, axis=2))
+            ref_channels_norm = [
+                _normalise_for_alignment(reference[:, :, c])
+                for c in range(reference.shape[2])
+            ]
+        else:
+            ref_lum = _normalise_for_alignment(reference)
+            ref_channels_norm = []
+
+        aligned: list[np.ndarray] = []
+        align_failed = 0
+
+        for i in range(n_calib):
+            frame = calibrated[i]
+            calibrated[i] = None  # release list slot; GC frees the array
+                                  # once `frame` goes out of scope below
+
+            if i == ref_idx:
+                aligned.append(frame)
+                self._report(f"  Frame {i}: reference (kept as-is)")
+            else:
+                args = (i, frame, ref_lum, ref_channels_norm, reference, is_color)
+                _, aligned_frame, error_msg = _align_single_frame(args)
+                del frame  # free input immediately after alignment attempt
+                if aligned_frame is not None:
+                    aligned.append(aligned_frame)
+                else:
+                    align_failed += 1
+                    self._report(
+                        f"  Frame {i} alignment failed — skipping: "
+                        f"{error_msg[:120]}"
+                    )
+
+            self._report_progress(i + 1, n_calib, "Aligning")
             self._check_cancel()
-            self._report_progress(current, total, "Aligning")
 
-        aligned = align_frames(
-            calibrated,
-            reference_index=min(self.config.reference_frame, len(calibrated) - 1),
-            progress_callback=align_progress,
-            status_callback=self._report,
+        # Free the calibrated list (all entries are now None) and
+        # the alignment scratch arrays.  `reference` is still held by
+        # aligned[ref_idx], so del only removes the extra reference here.
+        del calibrated, reference, ref_lum, ref_channels_norm
+
+        self._report(
+            f"Alignment: {len(aligned)}/{n_calib} succeeded, "
+            f"{align_failed} failed"
         )
         self._check_cancel()
 
