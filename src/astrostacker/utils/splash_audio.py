@@ -25,7 +25,12 @@ import time
 import wave
 
 import numpy as np
-from scipy.signal import lfilter
+
+try:
+    from scipy.signal import lfilter as _lfilter
+    _SCIPY_OK = True
+except Exception:
+    _SCIPY_OK = False
 
 
 _SR = 44_100   # sample rate (Hz)
@@ -236,9 +241,12 @@ def _make_harp_arpeggio(freqs: list[float], total_dur: float) -> np.ndarray:
 def _hall_reverb(signal: np.ndarray, wet: float = 0.20) -> np.ndarray:
     """Schroeder reverberator: 4 parallel comb filters + 2 all-pass.
 
-    Uses scipy.signal.lfilter (already a project dependency) for fast
-    vectorised IIR filtering — no Python loops over samples.
+    Uses scipy.signal.lfilter for fast vectorised IIR filtering.
+    Falls back to the dry signal if scipy is unavailable.
     """
+    if not _SCIPY_OK:
+        return signal  # no reverb — still sounds great
+
     # 4 parallel feedback comb filters
     comb_params = [
         (int(_SR * 0.0297), 0.820),
@@ -251,7 +259,7 @@ def _hall_reverb(signal: np.ndarray, wet: float = 0.20) -> np.ndarray:
         a = np.zeros(delay + 1)
         a[0] = 1.0
         a[delay] = -decay
-        rev += lfilter([1.0], a, signal)
+        rev += _lfilter([1.0], a, signal)
     rev /= 4.0
 
     # 2 series all-pass filters for diffusion
@@ -262,7 +270,7 @@ def _hall_reverb(signal: np.ndarray, wet: float = 0.20) -> np.ndarray:
         a = np.zeros(delay + 1)
         a[0] = 1.0
         a[delay] = -decay
-        rev = lfilter(b, a, rev)
+        rev = _lfilter(b, a, rev)
 
     return (signal * (1.0 - wet) + rev * wet).astype(np.float32)
 
