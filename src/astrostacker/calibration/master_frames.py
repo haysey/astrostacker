@@ -8,14 +8,18 @@ from astrostacker.io.loader import load_image
 from astrostacker.utils.parallel import parallel_load_images
 
 
-def _combine_frames(paths: list[str], method: str = "median") -> np.ndarray:
+def _combine_frames(paths: list[str], method: str = "mean") -> np.ndarray:
     """Load and combine multiple frames into a master frame.
 
-    Uses threaded parallel I/O to load frames concurrently.
+    Uses a streaming mean by default to keep memory usage constant
+    regardless of frame count (only 1 frame + accumulator in RAM at a
+    time).  Median is available for small datasets but loads all frames
+    simultaneously and should be avoided with 50+ large frames.
 
     Args:
         paths: List of file paths to combine.
-        method: Combination method - 'median' or 'mean'.
+        method: 'mean' (default, memory-efficient streaming) or
+                'median' (robust but loads all frames into RAM).
 
     Returns:
         Combined float32 master frame.
@@ -23,20 +27,37 @@ def _combine_frames(paths: list[str], method: str = "median") -> np.ndarray:
     if not paths:
         raise ValueError("No frames provided for combination")
 
-    frames = parallel_load_images(paths, load_image)
+    if method == "mean":
+        # Streaming incremental mean — O(frame_size) memory regardless of
+        # how many frames are provided.  With 100 frames this is
+        # statistically equivalent to median for well-behaved calibration
+        # data (same exposure, temperature, gain).
+        acc: np.ndarray | None = None
+        for path in paths:
+            frame = load_image(path).astype(np.float32)
+            if acc is None:
+                acc = frame.copy()
+            else:
+                acc += frame
+        assert acc is not None
+        return (acc / len(paths)).astype(np.float32)
 
-    stack = np.array(frames, dtype=np.float32)
+    elif method == "median":
+        # Load all frames at once — only suitable for small frame counts
+        # where total RAM (n_frames × frame_size) fits comfortably in memory.
+        frames = parallel_load_images(paths, load_image)
+        stack = np.array(frames, dtype=np.float32)
+        del frames
+        result = np.median(stack, axis=0).astype(np.float32)
+        del stack
+        return result
 
-    if method == "median":
-        return np.median(stack, axis=0).astype(np.float32)
-    elif method == "mean":
-        return np.mean(stack, axis=0).astype(np.float32)
     else:
         raise ValueError(f"Unknown combination method: {method}")
 
 
 def build_master_dark(
-    dark_paths: list[str], method: str = "median"
+    dark_paths: list[str], method: str = "mean"
 ) -> np.ndarray:
     """Build a master dark frame by combining individual dark frames.
 
@@ -53,7 +74,7 @@ def build_master_dark(
 def build_master_flat(
     flat_paths: list[str],
     dark_flat_paths: list[str] | None = None,
-    method: str = "median",
+    method: str = "mean",
 ) -> np.ndarray:
     """Build a normalized master flat frame.
 
