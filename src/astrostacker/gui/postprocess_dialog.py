@@ -1,15 +1,29 @@
-"""Dedicated post-processing window with large image preview and save options.
+"""Interactive post-processing window for AstroStacker.
 
-Open via Settings panel → Post-Processing → "Open Image for Post-Processing…"
-or automatically after loading any FITS file.  The dialog lets the user:
+Opens with any stacked image (from a pipeline run or loaded from disk),
+lets the user apply and preview post-processing steps, then save the result.
 
-  • Apply auto-crop, gradient removal, sharpening, denoise, star reduction,
-    and colour balance interactively without re-stacking.
-  • Preview the result at full size with zoom and stretch controls.
-  • Save the processed image as FITS (full precision) or a stretched
-    8-bit raster (TIFF / JPEG / PNG) for sharing.
+Layout
+------
+  ┌──────────────────────────────┬────────────────┐
+  │                              │  CONTROLS      │
+  │   Large image preview        │  (scroll)      │
+  │   (stretch + zoom controls)  │                │
+  │                              │  [▶  APPLY]    │
+  │   [Processed] [Original]     │  [  Reset  ]   │
+  │   toggle buttons             │  ──────────    │
+  │                              │  [Save FITS]   │
+  │                              │  [Save TIFF]   │
+  │                              │  [Save JPEG]   │
+  │                              │  [Save PNG ]   │
+  │                              │  [  Close  ]   │
+  └──────────────────────────────┴────────────────┘
 
-Processing runs on a background QThread so the UI stays responsive.
+Threading
+---------
+Apply runs the pipeline's _run_postprocessing() on a QThread.
+The worker uses @pyqtSlot and an explicit QueuedConnection so the
+result always lands back on the main thread for safe UI update.
 """
 
 from __future__ import annotations
@@ -18,7 +32,7 @@ import traceback
 from pathlib import Path
 
 import numpy as np
-from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -29,6 +43,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSlider,
     QSplitter,
     QVBoxLayout,
@@ -39,13 +54,14 @@ from astrostacker.gui.preview_panel import PreviewPanel
 from astrostacker.pipeline.pipeline import Pipeline, PipelineConfig
 
 
-# ── Background worker ───────────────────────────────────────────────────────
+# ── Background worker ──────────────────────────────────────────────────────
 
 class _PostProcessWorker(QObject):
-    """Runs Pipeline._run_postprocessing on a background thread.
+    """Runs Pipeline._run_postprocessing() on a background QThread.
 
-    Does NOT call pipeline.reprocess() (which would also try to save to disk).
-    Instead we call _run_postprocessing() directly so the dialog manages saving.
+    Emits finished(result) on success or error(message) on failure.
+    @pyqtSlot ensures PyQt6 creates a proper cross-thread queued invocation
+    when thread.started connects to run().
     """
 
     finished = pyqtSignal(np.ndarray)
@@ -56,129 +72,170 @@ class _PostProcessWorker(QObject):
         self._raw_stack = raw_stack
         self._config = config
 
+    @pyqtSlot()
     def run(self):
         try:
             pipeline = Pipeline(self._config)
-            # _run_postprocessing works on a copy of the raw stack and uses
-            # pipeline.config for all options.  measured_fwhm falls back to
-            # 2.5 px when not available, which is fine for interactive use.
+            # _run_postprocessing operates on a copy; output_path="" is safe
+            # because this method never writes to disk itself.
             result = pipeline._run_postprocessing(self._raw_stack.copy())
             self.finished.emit(result)
         except Exception as e:
             self.error.emit(f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
 
 
-# ── Dialog ──────────────────────────────────────────────────────────────────
+# ── Dialog ─────────────────────────────────────────────────────────────────
 
 class PostProcessDialog(QDialog):
     """Large-preview interactive post-processing window.
 
     Args:
-        raw_stack:      The pre-post-processing image (float32 ndarray).
-                        This is kept unchanged throughout the session — every
-                        Apply starts from this original.
-        initial_config: PipelineConfig from the main window used to pre-fill
-                        the controls.  Pass None to use defaults.
-        parent:         Parent widget (main window) so the dialog inherits
-                        the macOS dark stylesheet automatically.
+        raw_stack:  The pre-post-processing image as float32 ndarray.
+                    This is NEVER modified — every Apply starts from it.
+        parent:     Parent widget so the macOS dark stylesheet propagates.
     """
 
     def __init__(
         self,
         raw_stack: np.ndarray,
-        initial_config: PipelineConfig | None = None,
         parent=None,
     ):
         super().__init__(parent)
         self.setWindowTitle("Post-Processing")
-        self.setMinimumSize(1100, 780)
+        self.setMinimumSize(1200, 820)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        self.setWindowFlag(Qt.WindowType.Window)   # separate macOS window
+        self.setWindowFlag(Qt.WindowType.Window)
 
         self._raw_stack: np.ndarray = raw_stack          # never modified
-        self._current: np.ndarray = raw_stack.copy()     # latest result
+        self._processed: np.ndarray | None = None        # latest Apply result
+        self._showing_original = False                   # toggle state
         self._worker: _PostProcessWorker | None = None
         self._thread: QThread | None = None
 
         self._setup_ui()
-        self._populate_from_config(initial_config)
 
-        # Show the raw stack immediately so the user sees something straight away
+        # Show the raw stack right away
         self.preview.show_data(raw_stack, info="Original (unprocessed)")
 
-    # ── UI construction ─────────────────────────────────────────────────────
+    # ── UI ─────────────────────────────────────────────────────────────────
 
     def _setup_ui(self):
-        root = QVBoxLayout(self)
+        root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        splitter = QSplitter(Qt.Orientation.Vertical)
-        splitter.setChildrenCollapsible(False)
-        splitter.setHandleWidth(2)
+        # ── Left: large preview ─────────────────────────────────────────────
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(0)
 
-        # ── Top: large image preview ────────────────────────────────────────
         self.preview = PreviewPanel()
-        splitter.addWidget(self.preview)
+        left_layout.addWidget(self.preview, stretch=1)
 
-        # ── Bottom: controls + action buttons ──────────────────────────────
-        bottom = QWidget()
-        bottom.setObjectName("ppDialogBottom")
-        bottom.setStyleSheet(
-            "QWidget#ppDialogBottom {"
-            "  background-color: rgba(15, 15, 25, 0.90);"
-            "  border-top: 1px solid rgba(255, 255, 255, 0.08);"
+        # Toggle bar below preview
+        toggle_bar = QWidget()
+        toggle_bar.setStyleSheet(
+            "background-color: rgba(15, 15, 25, 0.90);"
+            "border-top: 1px solid rgba(255,255,255,0.08);"
+        )
+        toggle_layout = QHBoxLayout(toggle_bar)
+        toggle_layout.setContentsMargins(14, 6, 14, 6)
+        toggle_layout.setSpacing(8)
+
+        self._orig_btn = QPushButton("Show Original")
+        self._orig_btn.setObjectName("secondaryButton")
+        self._orig_btn.setEnabled(False)   # enabled after first Apply
+        self._orig_btn.setCheckable(True)
+        self._orig_btn.toggled.connect(self._on_toggle_original)
+        toggle_layout.addWidget(self._orig_btn)
+
+        self._compare_label = QLabel(
+            "Click  ▶ Apply  on the right to preview post-processing changes"
+        )
+        self._compare_label.setStyleSheet(
+            "color: rgba(255,149,0,0.80); font-size: 12px; font-weight: 600;"
+        )
+        toggle_layout.addWidget(self._compare_label, stretch=1)
+
+        left_layout.addWidget(toggle_bar)
+        root.addWidget(left, stretch=3)
+
+        # ── Right: controls + action buttons ───────────────────────────────
+        right = QWidget()
+        right.setObjectName("ppRight")
+        right.setFixedWidth(300)
+        right.setStyleSheet(
+            "QWidget#ppRight {"
+            "  background-color: rgba(12, 12, 22, 0.95);"
+            "  border-left: 1px solid rgba(255,255,255,0.08);"
             "}"
         )
-        bottom_root = QVBoxLayout(bottom)
-        bottom_root.setContentsMargins(14, 10, 14, 12)
-        bottom_root.setSpacing(10)
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(0)
 
-        # ── Four-column controls row ────────────────────────────────────────
-        ctrl_row = QHBoxLayout()
-        ctrl_row.setSpacing(12)
+        # Title strip
+        title_bar = QWidget()
+        title_bar.setStyleSheet(
+            "background-color: rgba(20, 20, 35, 0.95);"
+            "border-bottom: 1px solid rgba(255,255,255,0.10);"
+        )
+        title_bar_layout = QHBoxLayout(title_bar)
+        title_bar_layout.setContentsMargins(16, 10, 16, 10)
+        title_lbl = QLabel("Post-Processing")
+        title_lbl.setStyleSheet(
+            "font-size: 14px; font-weight: 700; color: #ff9500;"
+            "letter-spacing: 0.3px;"
+        )
+        title_bar_layout.addWidget(title_lbl)
+        right_layout.addWidget(title_bar)
 
-        # Column 1 — Cleanup
-        col1 = QGroupBox("Cleanup")
-        col1_layout = QVBoxLayout(col1)
-        col1_layout.setSpacing(6)
-        col1_layout.setContentsMargins(10, 22, 10, 8)
+        # Scroll area for controls
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+
+        ctrl_container = QWidget()
+        ctrl_layout = QVBoxLayout(ctrl_container)
+        ctrl_layout.setContentsMargins(12, 8, 12, 8)
+        ctrl_layout.setSpacing(6)
+
+        # ── Cleanup ──────────────────────────────────────────────────────
+        self._add_group_header(ctrl_layout, "CLEANUP")
 
         self.crop_check = QCheckBox("Auto-crop edges")
         self.crop_check.setToolTip(
-            "Trim the dark borders left by frame alignment.\n"
-            "Gives a clean rectangular image."
+            "Trim dark borders created by frame alignment.\n"
+            "Safe to enable for any stacked image."
         )
-        col1_layout.addWidget(self.crop_check)
+        ctrl_layout.addWidget(self.crop_check)
 
         self.gradient_check = QCheckBox("Remove gradient")
         self.gradient_check.setToolTip(
             "Fit and subtract a smooth sky background surface.\n"
-            "Corrects light pollution tint and vignetting.\n"
-            "Works best after Auto-crop clears the alignment borders."
+            "Corrects light pollution and vignetting."
         )
-        col1_layout.addWidget(self.gradient_check)
-        col1_layout.addStretch()
+        ctrl_layout.addWidget(self.gradient_check)
 
-        ctrl_row.addWidget(col1)
+        ctrl_layout.addSpacing(4)
 
-        # Column 2 — Enhance
-        col2 = QGroupBox("Enhance")
-        col2_layout = QVBoxLayout(col2)
-        col2_layout.setSpacing(6)
-        col2_layout.setContentsMargins(10, 22, 10, 8)
+        # ── Enhance ──────────────────────────────────────────────────────
+        self._add_group_header(ctrl_layout, "ENHANCE")
 
         sharpen_row = QHBoxLayout()
         sharpen_row.setSpacing(8)
+        sharpen_row.setContentsMargins(0, 0, 0, 0)
         self.sharpen_check = QCheckBox("Sharpen")
         self.sharpen_check.setToolTip(
-            "Sharpens the image using the star profile (PSF).\n"
-            "Best on well-exposed stacks with good SNR."
+            "PSF-informed sharpening (Richardson-Lucy).\n"
+            "Best on well-exposed stacks."
         )
         self.sharpen_check.toggled.connect(self._on_sharpen_toggled)
         sharpen_row.addWidget(self.sharpen_check)
         self.sharpen_combo = QComboBox()
-        self.sharpen_combo.addItem("Light", "light")
+        self.sharpen_combo.addItem("Light",  "light")
         self.sharpen_combo.addItem("Medium", "medium")
         self.sharpen_combo.addItem("Strong", "strong")
         self.sharpen_combo.setCurrentIndex(1)
@@ -186,19 +243,20 @@ class PostProcessDialog(QDialog):
         self.sharpen_combo.setMinimumWidth(90)
         sharpen_row.addWidget(self.sharpen_combo)
         sharpen_row.addStretch()
-        col2_layout.addLayout(sharpen_row)
+        ctrl_layout.addLayout(sharpen_row)
 
         denoise_row = QHBoxLayout()
         denoise_row.setSpacing(8)
+        denoise_row.setContentsMargins(0, 0, 0, 0)
         self.denoise_check = QCheckBox("Denoise")
         self.denoise_check.setToolTip(
-            "Non-Local Means denoising. Works best on compact targets\n"
-            "(galaxies, clusters). May smear large nebulae — try without first."
+            "Non-Local Means denoising. Great for galaxies and clusters.\n"
+            "Avoid on large emission nebulae — can smear real structure."
         )
         self.denoise_check.toggled.connect(self._on_denoise_toggled)
         denoise_row.addWidget(self.denoise_check)
         self.denoise_combo = QComboBox()
-        self.denoise_combo.addItem("Light", "light")
+        self.denoise_combo.addItem("Light",  "light")
         self.denoise_combo.addItem("Medium", "medium")
         self.denoise_combo.addItem("Strong", "strong")
         self.denoise_combo.setCurrentIndex(1)
@@ -206,28 +264,25 @@ class PostProcessDialog(QDialog):
         self.denoise_combo.setMinimumWidth(90)
         denoise_row.addWidget(self.denoise_combo)
         denoise_row.addStretch()
-        col2_layout.addLayout(denoise_row)
+        ctrl_layout.addLayout(denoise_row)
 
-        col2_layout.addStretch()
-        ctrl_row.addWidget(col2)
+        ctrl_layout.addSpacing(4)
 
-        # Column 3 — Stars
-        col3 = QGroupBox("Stars")
-        col3_layout = QVBoxLayout(col3)
-        col3_layout.setSpacing(6)
-        col3_layout.setContentsMargins(10, 22, 10, 8)
+        # ── Stars ─────────────────────────────────────────────────────────
+        self._add_group_header(ctrl_layout, "STARS")
 
         self.star_reduce_check = QCheckBox("Reduce stars")
         self.star_reduce_check.setToolTip(
-            "Reduce star brightness using high-pass detection + Gaussian masks.\n"
-            "No AI or model files required.\n"
-            "Adjust the strength slider and click Apply to preview."
+            "Reduce star brightness using morphological detection\n"
+            "(no AI, no model files).\n"
+            "Drag the slider, click Apply, compare with original."
         )
         self.star_reduce_check.toggled.connect(self._on_star_reduce_toggled)
-        col3_layout.addWidget(self.star_reduce_check)
+        ctrl_layout.addWidget(self.star_reduce_check)
 
         star_slider_row = QHBoxLayout()
         star_slider_row.setSpacing(6)
+        star_slider_row.setContentsMargins(0, 0, 0, 0)
         self.star_slider = QSlider(Qt.Orientation.Horizontal)
         self.star_slider.setRange(0, 100)
         self.star_slider.setValue(50)
@@ -238,182 +293,136 @@ class PostProcessDialog(QDialog):
         star_slider_row.addWidget(self.star_slider)
         self.star_pct_label = QLabel("50%")
         self.star_pct_label.setFixedWidth(36)
+        self.star_pct_label.setStyleSheet("color: rgba(255,255,255,0.7);")
         star_slider_row.addWidget(self.star_pct_label)
-        col3_layout.addLayout(star_slider_row)
+        ctrl_layout.addLayout(star_slider_row)
 
-        col3_layout.addStretch()
-        ctrl_row.addWidget(col3)
+        ctrl_layout.addSpacing(4)
 
-        # Column 4 — Colour Balance
-        col4 = QGroupBox("Colour Balance")
-        col4_layout = QVBoxLayout(col4)
-        col4_layout.setSpacing(4)
-        col4_layout.setContentsMargins(10, 22, 10, 8)
+        # ── Colour Balance ─────────────────────────────────────────────────
+        self._add_group_header(ctrl_layout, "COLOUR BALANCE")
 
         self.colour_check = QCheckBox("Enable colour balance")
         self.colour_check.setToolTip(
-            "Correct colour cast from light pollution, airglow, or\n"
-            "Bayer sensor green-channel dominance.\n"
-            "No-op on mono images."
+            "Correct colour cast from light pollution, airglow,\n"
+            "or Bayer sensor bias. No-op on mono images."
         )
         self.colour_check.toggled.connect(self._on_colour_balance_toggled)
-        col4_layout.addWidget(self.colour_check)
+        ctrl_layout.addWidget(self.colour_check)
 
         self.colour_auto_check = QCheckBox("Auto (recommended)")
         self.colour_auto_check.setChecked(True)
         self.colour_auto_check.setEnabled(False)
         self.colour_auto_check.setToolTip(
-            "Sample sky from image corners and make it neutral grey.\n"
-            "Works well for most light-polluted skies."
+            "Sample sky from image corners and neutralise any tint."
         )
         self.colour_auto_check.toggled.connect(self._on_colour_auto_toggled)
-        col4_layout.addWidget(self.colour_auto_check)
+        ctrl_layout.addWidget(self.colour_auto_check)
 
-        # R / G / B sliders (enabled only when Auto is off)
         for colour, attr in [("R", "r"), ("G", "g"), ("B", "b")]:
             row = QHBoxLayout()
             row.setSpacing(6)
+            row.setContentsMargins(0, 0, 0, 0)
             lbl = QLabel(colour)
             lbl.setFixedWidth(14)
+            lbl.setStyleSheet("color: rgba(255,255,255,0.7);")
             row.addWidget(lbl)
             slider = QSlider(Qt.Orientation.Horizontal)
-            slider.setRange(50, 200)   # 0.50× – 2.00×
-            slider.setValue(100)       # 1.00× default
+            slider.setRange(50, 200)
+            slider.setValue(100)
             slider.setEnabled(False)
-            slider.setMinimumWidth(70)
             val_lbl = QLabel("1.00×")
             val_lbl.setFixedWidth(44)
+            val_lbl.setStyleSheet("color: rgba(255,255,255,0.7);")
             slider.valueChanged.connect(
                 lambda v, l=val_lbl: l.setText(f"{v / 100:.2f}×")
             )
             row.addWidget(slider)
             row.addWidget(val_lbl)
-            col4_layout.addLayout(row)
+            ctrl_layout.addLayout(row)
             setattr(self, f"colour_{attr}_slider", slider)
             setattr(self, f"colour_{attr}_label", val_lbl)
 
-        ctrl_row.addWidget(col4)
-        bottom_root.addLayout(ctrl_row)
+        ctrl_layout.addStretch()
 
-        # ── Action / Save button row ────────────────────────────────────────
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
+        scroll.setWidget(ctrl_container)
+        right_layout.addWidget(scroll, stretch=1)
 
-        self.apply_btn = QPushButton("▶  Apply")
+        # ── Status label ────────────────────────────────────────────────────
+        self._status_label = QLabel("")
+        self._status_label.setWordWrap(True)
+        self._status_label.setStyleSheet(
+            "color: rgba(255,255,255,0.55); font-size: 11px;"
+            "padding: 4px 14px 2px 14px;"
+        )
+        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        right_layout.addWidget(self._status_label)
+
+        # ── Action buttons ──────────────────────────────────────────────────
+        actions = QWidget()
+        actions.setStyleSheet(
+            "background-color: rgba(12, 12, 22, 0.98);"
+            "border-top: 1px solid rgba(255,255,255,0.08);"
+        )
+        actions_layout = QVBoxLayout(actions)
+        actions_layout.setContentsMargins(12, 10, 12, 12)
+        actions_layout.setSpacing(6)
+
+        self.apply_btn = QPushButton("▶   Apply")
+        self.apply_btn.setObjectName("primaryButton")
+        self.apply_btn.setFixedHeight(44)
         self.apply_btn.setToolTip(
-            "Apply the selected post-processing steps.\n"
-            "Re-click with different settings to refine — the original\n"
-            "unprocessed image is never overwritten."
+            "Run the selected post-processing steps and update the preview.\n"
+            "The original image is always preserved — click Reset to go back.\n"
+            "Adjust settings and click Apply again to refine."
         )
         self.apply_btn.clicked.connect(self._on_apply)
-        btn_row.addWidget(self.apply_btn)
+        actions_layout.addWidget(self.apply_btn)
 
-        self.reset_btn = QPushButton("Reset")
+        self.reset_btn = QPushButton("Reset to Original")
         self.reset_btn.setObjectName("secondaryButton")
-        self.reset_btn.setToolTip("Discard all changes and show the original image.")
+        self.reset_btn.setToolTip("Restore the unprocessed original image.")
         self.reset_btn.clicked.connect(self._on_reset)
-        btn_row.addWidget(self.reset_btn)
+        actions_layout.addWidget(self.reset_btn)
 
-        self._status_label = QLabel("")
-        self._status_label.setStyleSheet(
-            "color: rgba(255,255,255,0.55); font-size: 12px;"
-        )
-        btn_row.addWidget(self._status_label, stretch=1)
+        # Divider
+        divider = QWidget()
+        divider.setFixedHeight(1)
+        divider.setStyleSheet("background-color: rgba(255,255,255,0.08);")
+        actions_layout.addSpacing(4)
+        actions_layout.addWidget(divider)
+        actions_layout.addSpacing(4)
 
-        # Save buttons
-        save_fits_btn = QPushButton("Save FITS…")
-        save_fits_btn.setObjectName("secondaryButton")
-        save_fits_btn.setToolTip(
-            "Save as 32-bit float FITS — full precision, ideal for\n"
-            "further processing in PixInsight, AstroPixelProcessor, etc."
-        )
-        save_fits_btn.clicked.connect(lambda: self._save("fits"))
-        btn_row.addWidget(save_fits_btn)
+        for label, fmt, tip in [
+            ("Save FITS…",  "fits",  "Full 32-bit float — for further processing"),
+            ("Save TIFF…",  "tiff",  "Stretched 8-bit TIFF — for printing/Photoshop"),
+            ("Save JPEG…",  "jpeg",  "Stretched JPEG — for sharing online"),
+            ("Save PNG…",   "png",   "Stretched PNG — lossless web format"),
+        ]:
+            btn = QPushButton(label)
+            btn.setObjectName("secondaryButton")
+            btn.setToolTip(tip)
+            btn.clicked.connect(lambda checked, f=fmt: self._save(f))
+            actions_layout.addWidget(btn)
 
-        save_tiff_btn = QPushButton("Save TIFF…")
-        save_tiff_btn.setObjectName("secondaryButton")
-        save_tiff_btn.setToolTip(
-            "Save as a stretched 8-bit TIFF — good for printing or\n"
-            "editing in Photoshop / Lightroom."
-        )
-        save_tiff_btn.clicked.connect(lambda: self._save("tiff"))
-        btn_row.addWidget(save_tiff_btn)
-
-        save_jpg_btn = QPushButton("Save JPEG…")
-        save_jpg_btn.setObjectName("secondaryButton")
-        save_jpg_btn.setToolTip(
-            "Save as a stretched JPEG — compact file size, ideal for\n"
-            "sharing on social media or astronomy forums."
-        )
-        save_jpg_btn.clicked.connect(lambda: self._save("jpeg"))
-        btn_row.addWidget(save_jpg_btn)
-
-        save_png_btn = QPushButton("Save PNG…")
-        save_png_btn.setObjectName("secondaryButton")
-        save_png_btn.setToolTip(
-            "Save as a stretched PNG — lossless, good for web use."
-        )
-        save_png_btn.clicked.connect(lambda: self._save("png"))
-        btn_row.addWidget(save_png_btn)
-
+        actions_layout.addSpacing(4)
         close_btn = QPushButton("Close")
         close_btn.setObjectName("secondaryButton")
         close_btn.clicked.connect(self.close)
-        btn_row.addWidget(close_btn)
+        actions_layout.addWidget(close_btn)
 
-        bottom_root.addLayout(btn_row)
-        splitter.addWidget(bottom)
+        right_layout.addWidget(actions)
+        root.addWidget(right)
 
-        # Give the preview most of the space; controls are fixed-ish at bottom
-        splitter.setStretchFactor(0, 4)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([520, 260])
-
-        root.addWidget(splitter)
-
-    # ── Initial value population ────────────────────────────────────────────
-
-    def _populate_from_config(self, config: PipelineConfig | None):
-        """Pre-fill controls from a PipelineConfig (from the main window)."""
-        if config is None:
-            return
-
-        _str_to_idx = {"light": 0, "medium": 1, "strong": 2}
-
-        self.crop_check.setChecked(config.auto_crop)
-        self.gradient_check.setChecked(config.remove_gradient)
-
-        self.sharpen_check.setChecked(config.deconvolve)
-        self.sharpen_combo.setCurrentIndex(
-            _str_to_idx.get(config.deconv_strength, 1)
+    def _add_group_header(self, layout: QVBoxLayout, text: str):
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            "color: #ff9500; font-size: 10px; font-weight: 700;"
+            "letter-spacing: 1px; padding-top: 6px; padding-bottom: 2px;"
         )
-        self.sharpen_combo.setEnabled(config.deconvolve)
+        layout.addWidget(lbl)
 
-        self.denoise_check.setChecked(config.denoise)
-        self.denoise_combo.setCurrentIndex(
-            _str_to_idx.get(config.denoise_strength, 1)
-        )
-        self.denoise_combo.setEnabled(config.denoise)
-
-        self.star_reduce_check.setChecked(config.star_reduce)
-        self.star_slider.setValue(int(config.star_reduce_strength * 100))
-        self.star_slider.setEnabled(config.star_reduce)
-
-        self.colour_check.setChecked(config.colour_balance)
-        self.colour_auto_check.setEnabled(config.colour_balance)
-        self.colour_auto_check.setChecked(config.colour_balance_auto)
-
-        manual = config.colour_balance and not config.colour_balance_auto
-        for attr, val in [
-            ("r", config.colour_balance_r),
-            ("g", config.colour_balance_g),
-            ("b", config.colour_balance_b),
-        ]:
-            slider = getattr(self, f"colour_{attr}_slider")
-            slider.setValue(int(val * 100))
-            slider.setEnabled(manual)
-
-    # ── Control toggle helpers ──────────────────────────────────────────────
+    # ── Toggle helpers ──────────────────────────────────────────────────────
 
     def _on_sharpen_toggled(self, checked: bool):
         self.sharpen_combo.setEnabled(checked)
@@ -436,13 +445,24 @@ class PostProcessDialog(QDialog):
         for attr in ("r", "g", "b"):
             getattr(self, f"colour_{attr}_slider").setEnabled(manual)
 
+    def _on_toggle_original(self, checked: bool):
+        self._showing_original = checked
+        self._orig_btn.setText("Show Processed" if checked else "Show Original")
+        if checked:
+            self.preview.show_data(self._raw_stack, info="Original (unprocessed)")
+        elif self._processed is not None:
+            h, w = self._processed.shape[:2]
+            chan = "RGB" if self._processed.ndim == 3 else "mono"
+            self.preview.show_data(
+                self._processed,
+                info=f"Post-processed  {w}×{h}  {chan}",
+            )
+
     # ── Config builder ──────────────────────────────────────────────────────
 
     def _build_config(self) -> PipelineConfig:
-        """Assemble a PipelineConfig from the current dialog controls."""
         return PipelineConfig(
-            # output_path left blank — dialog handles saving itself
-            output_path="",
+            output_path="",   # dialog saves separately — never writes to disk
             auto_crop=self.crop_check.isChecked(),
             remove_gradient=self.gradient_check.isChecked(),
             deconvolve=self.sharpen_check.isChecked(),
@@ -461,22 +481,42 @@ class PostProcessDialog(QDialog):
     # ── Apply / Reset ───────────────────────────────────────────────────────
 
     def _on_apply(self):
-        """Kick off post-processing on a background thread."""
+        """Launch post-processing on a background thread."""
         if self._thread is not None and self._thread.isRunning():
-            return  # already busy
+            return
 
+        # Make sure at least one option is enabled
         config = self._build_config()
-        self._set_busy(True)
-        self._status_label.setText("Processing…")
+        nothing_selected = not any([
+            config.auto_crop, config.remove_gradient,
+            config.deconvolve, config.denoise,
+            config.star_reduce, config.colour_balance,
+        ])
+        if nothing_selected:
+            self._status_label.setText(
+                "Enable at least one option above before clicking Apply."
+            )
+            return
 
+        self._set_busy(True)
+        self._status_label.setText("Processing — please wait…")
+
+        self._worker = _PostProcessWorker(self._raw_stack, config)
         self._thread = QThread()
         self._thread.setStackSize(16 * 1024 * 1024)
-        self._worker = _PostProcessWorker(self._raw_stack, config)
         self._worker.moveToThread(self._thread)
 
+        # Use explicit QueuedConnection so the slots always run on the
+        # main thread regardless of which thread emits the signal.
         self._thread.started.connect(self._worker.run)
-        self._worker.finished.connect(self._on_worker_finished)
-        self._worker.error.connect(self._on_worker_error)
+        self._worker.finished.connect(
+            self._on_worker_finished,
+            Qt.ConnectionType.QueuedConnection,
+        )
+        self._worker.error.connect(
+            self._on_worker_error,
+            Qt.ConnectionType.QueuedConnection,
+        )
         self._worker.finished.connect(self._thread.quit)
         self._worker.error.connect(self._thread.quit)
         self._thread.finished.connect(self._on_thread_done)
@@ -484,22 +524,36 @@ class PostProcessDialog(QDialog):
         self._thread.start()
 
     def _on_reset(self):
-        """Restore the original unprocessed stack."""
         if self._thread is not None and self._thread.isRunning():
             return
-        self._current = self._raw_stack.copy()
+        self._processed = None
+        self._orig_btn.setEnabled(False)
+        self._orig_btn.setChecked(False)
+        self._orig_btn.setText("Show Original")
+        self._compare_label.setText(
+            "Click  ▶ Apply  on the right to preview post-processing changes"
+        )
         self.preview.show_data(self._raw_stack, info="Original (unprocessed)")
         self._status_label.setText("Reset to original.")
 
+    @pyqtSlot(np.ndarray)
     def _on_worker_finished(self, result: np.ndarray):
-        self._current = result
+        self._processed = result
         h, w = result.shape[:2]
         chan = "RGB" if result.ndim == 3 else "mono"
-        self.preview.show_data(result, info=f"Post-processed  {w}×{h}  {chan}")
-        self._status_label.setText("Done.")
+        info = f"Post-processed  {w}×{h}  {chan}"
+        self.preview.show_data(result, info=info)
+        self._status_label.setText("✓  Done — compare with original using the button.")
+        self._orig_btn.setEnabled(True)
+        self._orig_btn.setChecked(False)
+        self._orig_btn.setText("Show Original")
+        self._compare_label.setText(
+            "Showing post-processed result.  Use 'Show Original' to compare."
+        )
 
+    @pyqtSlot(str)
     def _on_worker_error(self, message: str):
-        self._status_label.setText("Error — see dialog")
+        self._status_label.setText("Processing failed — see error dialog.")
         QMessageBox.critical(self, "Post-Processing Error", message)
 
     def _on_thread_done(self):
@@ -511,12 +565,13 @@ class PostProcessDialog(QDialog):
         self.apply_btn.setEnabled(not busy)
         self.reset_btn.setEnabled(not busy)
 
-    # ── Save helpers ────────────────────────────────────────────────────────
+    # ── Save ───────────────────────────────────────────────────────────────
 
     def _save(self, fmt: str):
-        """Save the current image (processed or original if Apply not clicked)."""
-        fmt = fmt.lower()
+        """Save the current image (processed if available, else original)."""
+        data = self._processed if self._processed is not None else self._raw_stack
 
+        fmt = fmt.lower()
         if fmt == "fits":
             filter_str = "FITS Files (*.fits);;XISF Files (*.xisf)"
         elif fmt == "tiff":
@@ -532,42 +587,28 @@ class PostProcessDialog(QDialog):
         if not path:
             return
 
-        # Ensure extension
         p = Path(path)
         if not p.suffix:
-            ext_map = {
-                "fits": ".fits",
-                "tiff": ".tiff",
-                "jpeg": ".jpg",
-                "png": ".png",
-            }
+            ext_map = {"fits": ".fits", "tiff": ".tiff", "jpeg": ".jpg", "png": ".png"}
             path = str(p) + ext_map.get(fmt, ".fits")
 
         try:
             if fmt == "fits":
                 from astrostacker.io.loader import save_image
-                save_image(path, self._current)
+                save_image(path, data)
             else:
                 from astrostacker.utils.stretch import auto_stretch
                 from astrostacker.utils.image_utils import numpy_to_qpixmap
-                stretched = auto_stretch(self._current)
-                pixmap = numpy_to_qpixmap(stretched)
-                ok = pixmap.save(path)
-                if not ok:
-                    raise RuntimeError(
-                        f"QPixmap.save() returned False — check path and format."
-                    )
-
-            QMessageBox.information(
-                self, "Saved", f"Image saved to:\n{path}"
-            )
+                pixmap = numpy_to_qpixmap(auto_stretch(data))
+                if not pixmap.save(path):
+                    raise RuntimeError("QPixmap.save() failed — check path and format.")
+            QMessageBox.information(self, "Saved", f"Image saved to:\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "Save Error", str(e))
 
-    # ── Clean up on close ───────────────────────────────────────────────────
+    # ── Cleanup ─────────────────────────────────────────────────────────────
 
     def closeEvent(self, event):
-        """Stop any running worker thread before closing."""
         if self._thread is not None and self._thread.isRunning():
             self._thread.quit()
             self._thread.wait(3000)
