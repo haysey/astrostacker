@@ -498,6 +498,11 @@ class MainWindow(QMainWindow):
         self._mosaic_worker: MosaicWorker | None = None
         self._mosaic_thread: QThread | None = None
         self._last_aligned_frames: list | None = None
+        # Cached pre-post-processing stack — persists across sessions so
+        # Re-apply and PostProcessDialog work even after the pipeline worker
+        # has been cleaned up.
+        self._raw_stack: np.ndarray | None = None
+        self._postprocess_dialog = None  # keep dialog reference alive
         self._setup_ui()
         self._setup_menu_bar()
         self._connect_signals()
@@ -686,6 +691,7 @@ class MainWindow(QMainWindow):
         self.mosaic_panel.build_btn.clicked.connect(self._on_build_mosaic)
         self.settings_panel.auto_solve_check.toggled.connect(self._on_auto_solve_toggled)
         self.settings_panel.reprocess_requested.connect(self._on_reprocess)
+        self.settings_panel.open_postprocess_requested.connect(self._on_open_postprocess)
 
     def _on_file_selected(self, path: str):
         self.preview_panel.show_file(path)
@@ -794,57 +800,120 @@ class MainWindow(QMainWindow):
         )
 
     def _on_reprocess(self):
-        """Re-apply post-processing on the cached stack without re-stacking."""
-        if self._worker is None or self._worker.pipeline._raw_stack is None:
+        """Re-apply post-processing on the cached raw stack without re-stacking.
+
+        Works whether the original stack came from a pipeline run this session
+        or was loaded via "Open Image for Post-Processing".
+        """
+        # Find the raw (pre-post-processing) stack — prefer the pipeline cache
+        # if still alive, otherwise fall back to the main-window copy.
+        raw: np.ndarray | None = None
+        if self._worker is not None and self._worker.pipeline._raw_stack is not None:
+            raw = self._worker.pipeline._raw_stack
+        elif self._raw_stack is not None:
+            raw = self._raw_stack
+
+        if raw is None:
             QMessageBox.information(
                 self,
-                "No Stack Available",
-                "Please run a full stack first before using Re-apply.",
+                "No Image Available",
+                "There is no image to re-process.\n\n"
+                "Please either:\n"
+                "  • Run a full stack first, or\n"
+                "  • Use 'Open Image for Post-Processing…' to load an\n"
+                "    existing FITS file.",
             )
             return
 
         if self._thread is not None and self._thread.isRunning():
-            return  # already busy
-
-        # Update the pipeline config with current UI settings (post-processing
-        # fields only — light_paths etc. are irrelevant for reprocess())
-        sp = self.settings_panel
-        cfg = self._worker.pipeline.config
-        cfg.remove_gradient = sp.get_remove_gradient()
-        cfg.denoise = sp.get_denoise()
-        cfg.denoise_strength = sp.get_denoise_strength()
-        cfg.deconvolve = sp.get_deconvolve()
-        cfg.deconv_strength = sp.get_deconv_strength()
-        cfg.auto_crop = sp.get_auto_crop()
-        cfg.star_reduce = sp.get_star_reduce()
-        cfg.star_reduce_strength = sp.get_star_reduce_strength()
-        cfg.colour_balance = sp.get_colour_balance()
-        cfg.colour_balance_auto = sp.get_colour_balance_auto()
-        cfg.colour_balance_r = sp.get_colour_balance_r()
-        cfg.colour_balance_g = sp.get_colour_balance_g()
-        cfg.colour_balance_b = sp.get_colour_balance_b()
+            return  # pipeline is already busy
 
         self.progress_panel.reset()
         self.progress_panel.set_running(True)
-        self.frame_status_bar.set_status("Re-processing...")
-        self.progress_panel.log("Re-applying post-processing (no re-stack)...")
+        self.frame_status_bar.set_status("Re-processing…")
+        self.progress_panel.log("Re-applying post-processing (no re-stack)…")
 
-        # Run reprocess() on a fresh thread, reusing the same pipeline object
+        # Build a fresh config from the current UI settings.  Only
+        # post-processing fields and output_path are used by reprocess().
+        light_paths = self.file_panel.get_light_paths() or []
+        config = self._build_config(light_paths)
+
+        # Create a fresh worker with the raw stack injected so reprocess()
+        # can find it without needing the original pipeline run.
         self._thread = QThread()
         self._thread.setStackSize(16 * 1024 * 1024)
+        self._worker = PipelineWorker(config)
+        self._worker.pipeline._raw_stack = raw.copy()
+        self._worker.pipeline.set_callbacks(
+            status=self._on_status,
+            progress=self._on_progress,
+        )
         self._worker.moveToThread(self._thread)
+
         self._thread.started.connect(self._worker.reprocess)
+        self._worker.finished.connect(self._on_finished)
+        self._worker.error.connect(self._on_error)
         self._worker.finished.connect(self._thread.quit)
         self._worker.error.connect(self._thread.quit)
         self._worker.cancelled.connect(self._thread.quit)
         self._thread.finished.connect(self._on_thread_done)
         self._thread.start()
 
+    def _on_open_postprocess(self):
+        """Load a FITS file and open it in the PostProcessDialog."""
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Open Image for Post-Processing",
+            "",
+            "FITS / XISF Files (*.fits *.fit *.fts *.xisf);;All Files (*)",
+        )
+        if not path:
+            return
+
+        try:
+            from astrostacker.io.loader import load_image
+            self.progress_panel.log(
+                f"Loading {Path(path).name} for post-processing…"
+            )
+            data = load_image(path)
+        except Exception as e:
+            QMessageBox.critical(self, "Load Error", str(e))
+            return
+
+        # Store as the raw stack so Re-apply also works
+        self._raw_stack = data
+        self.settings_panel.enable_reprocess(True)
+        self.progress_panel.log(
+            f"Image loaded ({data.shape[1]}×{data.shape[0]}, "
+            f"{'RGB' if data.ndim == 3 else 'mono'}). "
+            "Opening post-processing window…"
+        )
+
+        # Build config from current UI to pre-populate dialog controls
+        light_paths = self.file_panel.get_light_paths() or []
+        config = self._build_config(light_paths)
+
+        # Import lazily to avoid a circular import at module level
+        from astrostacker.gui.postprocess_dialog import PostProcessDialog
+
+        # Keep a reference so the dialog is not garbage-collected
+        self._postprocess_dialog = PostProcessDialog(
+            raw_stack=data,
+            initial_config=config,
+            parent=self,
+        )
+        self._postprocess_dialog.show()
+
     def _on_finished(self, result: np.ndarray):
         self.progress_panel.log("Processing complete!")
         self.progress_panel.set_progress(100, 100, "Done")
         self.preview_panel.show_data(result, info="Stacked Result")
         self.histogram_panel.set_data(result)
+
+        # Cache the pre-post-processing raw stack so Re-apply and
+        # PostProcessDialog can work even after this worker is cleared.
+        if self._worker is not None and self._worker.pipeline._raw_stack is not None:
+            self._raw_stack = self._worker.pipeline._raw_stack.copy()
 
         # Update frame status bar with rejection info
         total = len(self.file_panel.get_light_paths())

@@ -81,6 +81,7 @@ def _sigma_clip_channel(args: tuple) -> np.ndarray:
         axis=0,
         masked=True,
         cenfunc="median",
+        stdfunc="mad_std",  # MAD-based std: immune to outlier inflation
     )
     return np.ma.mean(clipped, axis=0).data.astype(np.float32)
 
@@ -130,6 +131,7 @@ def stack_sigma_clip(
         axis=0,
         masked=True,
         cenfunc="median",
+        stdfunc="mad_std",  # MAD-based std: immune to outlier inflation
     )
     return np.ma.mean(clipped, axis=0).data.astype(np.float32)
 

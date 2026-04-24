@@ -24,11 +24,16 @@ from scipy.ndimage import gaussian_filter
 # FWHM → sigma conversion factor
 _FWHM_TO_SIGMA = 1.0 / (2.0 * np.sqrt(2.0 * np.log(2.0)))  # ≈ 0.4247
 
-# Strength presets: (amount, description)
+# Strength presets — amount of the detail layer added back.
+# Values are intentionally conservative: high-contrast astro images
+# (nebulae with dark dust lanes, galaxies) show false ringing in the
+# auto-stretched view when USM is too aggressive, because brightening
+# the nebula peaks increases local contrast and makes adjacent dark
+# lanes appear darker after stretching.
 SHARPEN_PRESETS = {
-    "light":  0.3,
-    "medium": 0.5,
-    "strong": 0.8,
+    "light":  0.12,
+    "medium": 0.22,
+    "strong": 0.38,
 }
 
 
@@ -80,6 +85,16 @@ def _sharpen_mono(
     # the image is auto-stretched.
     detail = img - blurred
     detail = np.maximum(detail, 0.0)       # positive-only
+
+    # Brightness protection: pixels already near the image peak get
+    # progressively less sharpening.  Without this, bright nebula cores
+    # and star halos are pushed even higher, which after auto-stretching
+    # makes neighbouring dark regions look artificially darker (the
+    # false-ringing effect).  Cap the addition at 15 % of the local
+    # pixel value so faint detail is sharpened freely but bright peaks
+    # are left largely alone.
+    cap = img * 0.15
+    detail = np.minimum(detail, cap)
 
     sharpened = img + amount * detail
 

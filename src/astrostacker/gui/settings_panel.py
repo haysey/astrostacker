@@ -62,6 +62,9 @@ class SettingsPanel(QWidget):
     # Emitted when the user clicks Re-apply Post-Processing
     reprocess_requested = pyqtSignal()
 
+    # Emitted when the user clicks "Open Image for Post-Processing…"
+    open_postprocess_requested = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._setup_ui()
@@ -461,6 +464,20 @@ class SettingsPanel(QWidget):
         )
         self.reprocess_btn.clicked.connect(self.reprocess_requested.emit)
         postproc_layout.addRow(self.reprocess_btn)
+
+        # Open Image for Post-Processing button
+        self.open_postproc_btn = QPushButton("Open Image for Post-Processing…")
+        self.open_postproc_btn.setObjectName("secondaryButton")
+        self.open_postproc_btn.setToolTip(
+            "Load any existing FITS file and open it in the full-screen\n"
+            "post-processing window — no need to re-stack.\n"
+            "\n"
+            "Apply gradient removal, sharpening, denoising, star reduction,\n"
+            "and colour balance interactively, then save as FITS, TIFF,\n"
+            "JPEG, or PNG."
+        )
+        self.open_postproc_btn.clicked.connect(self.open_postprocess_requested.emit)
+        postproc_layout.addRow(self.open_postproc_btn)
 
         layout.addWidget(postproc_group)
 
