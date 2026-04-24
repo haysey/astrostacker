@@ -460,21 +460,37 @@ final stacked result, then subtracts it, leaving a flat, even background.
 Recommended for: suburban or urban imaging sites, moonlit sessions, or any
 target where the background is noticeably brighter on one side.
 
-Note: this operates on the final stacked image. For per-frame gradient removal
-before stacking, use Local Normalisation instead (see 7.3).
+Note: Gradient removal operates on the final stacked image, after Auto-crop
+has removed alignment borders. This means the background sampler has clean
+data all the way to the image corners — giving accurate gradient modelling
+even for wide-field targets.
 
 ── 7.3  LOCAL NORMALISATION (PER-FRAME) ───────────────────────────────────────
 
 Applies the same gradient removal algorithm (see 7.2) to every individual
-frame before it is included in the stack, rather than just the final result.
+frame before alignment, rather than just the final stack.
 
-This is particularly valuable for long multi-hour imaging sessions where sky
-brightness, cloud, or local horizon interference changed significantly during
-the session. Each frame is corrected individually before being combined.
+When to use it:
+  Long multi-hour imaging sessions where sky brightness, cloud, or local
+  horizon interference changed significantly between frames. Correcting each
+  frame for its own gradient before combining ensures that varying sky levels
+  do not contaminate the stack.
 
-Note: Local Normalisation is slower than post-stack gradient removal (it
-processes every frame). For a single-night session without unusual brightness
-changes, post-stack gradient removal is usually sufficient.
+When NOT to use it:
+  - For most targets, post-stack gradient removal (section 7.2) gives
+    a cleaner, smoother result and should be preferred.
+  - On targets that fill the entire field of view (large emission nebulae
+    such as the Eta Carinae or Orion nebula complex), per-frame correction
+    can produce a mottled, blotchy background in the stack. The background
+    sampler has difficulty distinguishing faint nebulosity from sky in every
+    individual frame, and the slightly different corrections bake into the
+    stack as large-scale texture.
+  - Do not enable both Local Normalisation and Remove Light Pollution
+    Gradient at the same time. Running both creates a double-correction
+    that amplifies the mottled effect. Use one or the other.
+
+Note: Local Normalisation is slower than post-stack gradient removal because
+it processes every frame individually.
 
 ── 7.4  AUTO-CROP STACKING EDGES ──────────────────────────────────────────────
 
@@ -507,6 +523,17 @@ Strength options:
 Tip: Denoise is most effective when applied after stacking many frames.
 A stack of 5 frames with Strong denoise will not look as good as a stack of
 50 frames with no denoise. Stack more frames first if possible.
+
+Target type matters:
+  Compact targets (galaxies, globular clusters, planetary nebulae) with
+  clear sky background surrounding the object respond very well to NLM
+  denoising — the algorithm readily finds similar sky patches to average.
+
+  Large emission nebulae that fill the entire field of view may look worse
+  with denoising enabled. NLM finds "similar" patches across different parts
+  of the nebula and averages them together, smearing real fine structure and
+  creating unwanted texture. For these targets, try the stack without
+  denoising first — a well-exposed multi-frame stack often needs none.
 
 ── 7.6  SHARPEN ────────────────────────────────────────────────────────────────
 
@@ -638,11 +665,15 @@ The pipeline executes these stages in order:
     - Star profiles are measured for each calibrated frame.
     - Poor-quality frames (blurry, trailed) are removed from the set.
 
+  Stage 2c: Local Normalisation (if enabled)
+    - Gradient removal is applied to each calibrated, debayered frame
+      individually, before alignment.
+    - Runs at this stage so that all pixels are valid (no NaN alignment
+      borders) and the colour-aware gradient model works correctly.
+
   Stage 3:  Align frames
     - All frames are aligned to the chosen reference frame using star pattern
       matching (triangle similarity, via the astroalign library).
-    - If Local Normalisation is enabled, gradient removal is applied to each
-      aligned frame before stacking.
 
   Stage 4:  Stack
     - All aligned frames are combined using the chosen stacking method.

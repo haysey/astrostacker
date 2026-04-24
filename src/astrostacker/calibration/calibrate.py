@@ -69,6 +69,69 @@ def _match_shape(
     return cal_frame
 
 
+def _compute_dark_scale(light: np.ndarray, dark: np.ndarray) -> float:
+    """Compute the optimal dark frame scaling factor (dark optimisation).
+
+    Finds the scalar k that minimises the residual variance in sky-dominated
+    pixels after subtracting k × dark from the light frame:
+
+        k = Cov(light_sky, dark_sky) / Var(dark_sky)
+
+    This is the ordinary-least-squares slope of light ~ k × dark in the
+    sky region, which is also the k that minimises
+    ``sum((light_i − k × dark_i)²)`` over those pixels.
+
+    PixInsight's WBPP applies an equivalent optimisation by default.  The
+    practical effect: even when lights and darks are shot at the same
+    temperature, tiny read-noise and gain variations shift the effective
+    amp-glow level between sessions.  A fixed k = 1.0 leaves a residual;
+    the optimised k cancels it.
+
+    Sky proxy: the darkest 40 % of valid pixels in the light frame.
+    On nebula-filling targets the faint-pixel population is dominated by
+    sky gaps, not bright emission, so the estimate is robust even when
+    the object covers most of the FOV.
+
+    Args:
+        light: Raw light frame (float32) *before* any subtraction.
+        dark: Master dark frame, same shape as ``light``.
+
+    Returns:
+        Optimal scale factor k, clamped to [0.5, 2.0].  Returns 1.0 if
+        there is not enough sky signal or the dark has no spatial variation.
+    """
+    l = light.ravel().astype(np.float64)
+    d = dark.ravel().astype(np.float64)
+
+    # Keep only finite, positive pixels in both frames
+    valid = np.isfinite(l) & np.isfinite(d) & (l > 0) & (d > 0)
+    if valid.sum() < 1000:
+        return 1.0
+
+    l = l[valid]
+    d = d[valid]
+
+    # Sky proxy: darkest 40 % of the light frame
+    threshold = np.percentile(l, 40)
+    sky = l <= threshold
+    if sky.sum() < 1000:
+        return 1.0
+
+    l_s = l[sky]
+    d_s = d[sky]
+
+    # OLS slope = Cov / Var
+    d_mean = d_s.mean()
+    variance = np.mean((d_s - d_mean) ** 2)
+    if variance < 1e-6:
+        return 1.0  # dark has no spatial variation — cannot optimise
+
+    covariance = np.mean((l_s - l_s.mean()) * (d_s - d_mean))
+    k = covariance / variance
+
+    return float(np.clip(k, 0.5, 2.0))
+
+
 def prepare_flat_divisor(
     master_flat: np.ndarray,
     target_shape: tuple[int, ...] | None = None,
@@ -121,7 +184,11 @@ def calibrate_light(
 
     if master_dark is not None:
         dark = _match_shape(master_dark, result.shape, "dark")
-        np.subtract(result, dark, out=result)
+        k = _compute_dark_scale(result, dark)
+        log.debug("Dark optimisation scale factor: %.4f", k)
+        scaled_dark = (dark * np.float32(k)).astype(np.float32)
+        np.subtract(result, scaled_dark, out=result)
+        del scaled_dark
 
     if flat_divisor is not None:
         flat = _match_shape(flat_divisor, result.shape, "flat")

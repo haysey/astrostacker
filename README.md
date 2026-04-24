@@ -19,8 +19,8 @@ The first full release of Haysey's Astrostacker. Everything in one place.
 - **PSF-informed sharpening** — positive-only unsharp masking keyed to your measured star FWHM. Brightens fine detail without ever creating dark halos. Light / Medium / Strong presets.
 - **Non-Local Means denoising** — post-stack noise reduction. Preserves star profiles and nebula structure. Light / Medium / Strong presets. No GPU required.
 - **Weighted Mean stacking** — automatically weights sharper, rounder frames higher using PSF quality scores.
-- **Local normalisation** — per-frame gradient removal before stacking, so changing sky glow between frames doesn't contaminate the stack
-- **Gradient removal** — post-stack light pollution subtraction
+- **Gradient removal** — post-stack light pollution subtraction, runs after auto-crop for clean corner sampling
+- **Local normalisation** — per-frame gradient removal before alignment, for multi-hour sessions where sky brightness shifted between frames
 - **Auto frame rejection** — PSF-based scoring discards blurry and trailed frames before stacking
 - **Auto-crop** — trims alignment edge artifacts from the final stack
 
@@ -92,8 +92,8 @@ Haysey's Astrostacker handles the entire workflow:
 ### Processing
 - **PSF-based frame rejection** — fits 2D Gaussian profiles to stars in each frame, measuring FWHM (sharpness) and eccentricity (elongation). Automatically rejects both blurry AND trailed frames.
 - **PSF-informed sharpening** — tightens star profiles and enhances nebula detail using the measured star FWHM. Positive-only enhancement ensures nothing is ever darkened — no dark halos. Light/Medium/Strong presets.
-- **Light pollution gradient removal** — fits and subtracts a smooth background surface to remove sky gradients from light pollution, moonlight, or vignetting
-- **Local normalisation** — per-frame gradient removal before stacking to prevent gradient drift between frames from contaminating the stack
+- **Light pollution gradient removal** — fits and subtracts a smooth background surface to remove sky gradients from light pollution, moonlight, or vignetting. Runs after auto-crop so alignment borders never interfere with corner sampling
+- **Local normalisation** — per-frame gradient removal before alignment, for multi-hour sessions where sky brightness changed between frames. Note: not recommended for targets that fill the entire field of view (large emission nebulae) — use post-stack gradient removal instead
 - **Non-Local Means denoising** — classical NLM noise reduction (Buades et al. 2005) with automatic noise estimation and Light/Medium/Strong presets. Preserves star profiles and nebula structure.
 - **Auto-crop** — trims the black/NaN borders left by frame alignment for a clean rectangular result
 
@@ -286,7 +286,7 @@ If you see a "permission denied" error on the desktop shortcut:
 
 - **Auto-reject blurry frames** — tick this to automatically score and reject poor-quality frames
 - **Remove light pollution gradient** — great for suburban observing sites
-- **Local normalisation** — remove gradients from each frame individually before stacking (best for multi-hour sessions where sky brightness changes)
+- **Local normalisation** — remove gradients from each frame individually before alignment (for multi-hour sessions where sky brightness changed significantly). For most targets, **Remove light pollution gradient** alone gives cleaner results and should be preferred
 - **Sharpen (Deconvolution)** — tightens star profiles and reveals fine detail. Choose Light, Medium, or Strong.
 - **Denoise (Non-Local Means)** — smooth noisy backgrounds while preserving detail. Choose Light, Medium, or Strong.
 - **Auto-crop stacking edges** — cleans up the black borders from alignment
@@ -454,11 +454,12 @@ TIFF and PNG exports have auto-stretch applied (PixInsight-style screen transfer
 - **Use flats if possible.** Flat frames correct for vignetting, dust spots, and uneven illumination.
 - **Save and reuse master frames.** The app saves master darks and flats automatically. Next session, load them with the Master Dark/Flat buttons instead of re-adding individual frames.
 - **Enable auto-reject** if you have more than a handful of subs. PSF fitting catches both blurry AND trailed frames automatically.
-- **Use gradient removal** if you observe from suburban areas — it makes a big difference.
+- **Use gradient removal** if you observe from suburban areas — it makes a big difference. Always enable **Auto-crop** alongside it so the alignment borders are cleared before the gradient model runs.
+- **Do not combine Local normalisation with Gradient removal** — use one or the other. For most targets, post-stack gradient removal gives a cleaner, smoother result. Local normalisation is mainly useful for multi-hour sessions where sky brightness shifted significantly between frames.
 - **Median stacking** is the safe default. For 15+ frames, try **Sigma Clip** or **Winsorized Sigma** to reject satellite trails and hot pixels.
 - **Noise-Weighted stacking** is great if your subs have varying sky conditions — cleaner exposures contribute more.
 - **Try Sharpen (Deconvolution)** on well-exposed stacks — start with "Light" and increase if your stack has good SNR. Tightens star profiles and reveals fine detail.
-- **Denoise after stacking** with the Non-Local Means option — start with "Light" and increase if needed. Denoising runs after deconvolution, cleaning up any amplified noise.
+- **Denoise** works best on compact targets (galaxies, clusters, planetary nebulae) with visible sky background. On targets that fill the entire frame (large emission nebulae), it can add unwanted texture — try without it first.
 - **Drizzle stacking** works best when your mount dithers between exposures. If you don't dither, standard stacking is better.
 - **Plate solve your results** to embed astrometry data. PixInsight's SPCC requires this for accurate colour calibration.
 - **Save sessions** before closing the app so you can reload your file lists and settings next time.

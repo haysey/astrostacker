@@ -205,7 +205,8 @@ class Pipeline:
 
         workers = optimal_workers(io_bound=False)
         n_frames = len(lights)
-        self._report(f"Calibrating {n_frames} frames across {workers} cores...")
+        dark_opt_note = " (with dark optimisation)" if master_dark is not None else ""
+        self._report(f"Calibrating {n_frames} frames across {workers} cores{dark_opt_note}...")
 
         def _calibrate_one(light):
             return calibrate_light(light, master_dark, flat_divisor=flat_div)
@@ -268,6 +269,40 @@ class Pipeline:
             self._check_cancel()
 
         self.accepted_count = len(calibrated)
+
+        # Stage 2d: Local normalisation — per-frame background removal
+        # ---------------------------------------------------------------
+        # Positioned HERE (post-debayer, post-rejection, PRE-alignment) so:
+        #   1. Full pixel coverage — no NaN alignment footprint yet.
+        #      The previous placement (post-alignment) let NaN borders fill
+        #      the corner cells where the glow lives, causing the gradient
+        #      model to fall back to the global sky estimate and miss it.
+        #   2. Colour-aware — operates on debayered RGB frames so the
+        #      luminance-pedestal approach preserves R:G:B ratios correctly.
+        #      (Pre-debayer application treated all Bayer pixels the same,
+        #       causing green-channel bias and colour shifts.)
+        #   3. High sky background still present — each 300 s sub has the
+        #      full light-pollution pedestal intact, giving the 6×6 grid
+        #      strong contrast to model the gradient before stacking.
+        #   4. Per-frame gradient direction — sky gradients rotate as the
+        #      target moves across the sky; correcting each frame for its
+        #      own gradient before alignment gives cleaner individual frames.
+        if self.config.local_normalise:
+            n_norm = len(calibrated)
+            self._report(
+                f"Local normalisation — removing background from {n_norm} frames..."
+            )
+            for i in range(n_norm):
+                # Use a 12×12 grid for per-frame normalisation: corner cells
+                # are ~235×345 px, so a ~200 px edge glow fills ~49 % of each
+                # corner cell — enough for the sigma-clipped median to detect
+                # and model it.  Individual frames have lower nebulosity SNR
+                # than the final stack, so sigma-clipping still separates sky
+                # from faint emission safely.
+                calibrated[i] = remove_gradient(calibrated[i], grid_size=12)
+                self._report_progress(i + 1, n_norm, "Local normalising")
+            self._report("Local normalisation complete")
+            self._check_cancel()
 
         # Stage 3: Align calibrated frames
         # Sequential free-as-you-go alignment: each input frame's slot in
@@ -343,14 +378,6 @@ class Pipeline:
                 f"Only {len(aligned)} frame(s) aligned successfully. "
                 "Need at least 2 to stack."
             )
-
-        # Stage 3b: Local normalisation (per-frame gradient removal)
-        if self.config.local_normalise:
-            self._report("Local normalisation (per-frame gradient removal)...")
-            for i in range(len(aligned)):
-                aligned[i] = remove_gradient(aligned[i])
-            self._report("Local normalisation complete")
-            self._check_cancel()
 
         # Stage 4: Stack
         if self.config.drizzle:

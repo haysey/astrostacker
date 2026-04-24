@@ -245,10 +245,18 @@ class SettingsPanel(QWidget):
 
         self.local_norm_check = QCheckBox("Local normalisation (per-frame)")
         self.local_norm_check.setToolTip(
-            "Removes sky gradients from each frame individually before\n"
-            "stacking. Useful for long multi-hour sessions where sky\n"
-            "brightness changed during imaging. More thorough than\n"
-            "post-stack gradient removal, but slower."
+            "Removes sky gradients from each frame individually, before\n"
+            "alignment. Useful for multi-hour sessions where sky brightness\n"
+            "changed significantly between frames.\n"
+            "\n"
+            "For most targets: use 'Remove light pollution gradient' instead —\n"
+            "it runs on the final stack after Auto-crop clears the alignment\n"
+            "borders, giving a cleaner result without per-frame artefacts.\n"
+            "\n"
+            "Caution: on targets that fill the entire field of view (large\n"
+            "emission nebulae), per-frame correction can create a mottled\n"
+            "background in the stack. Do not combine with 'Remove light\n"
+            "pollution gradient' — use one or the other."
         )
         proc_layout.addRow(self.local_norm_check)
 
@@ -267,8 +275,12 @@ class SettingsPanel(QWidget):
         self.denoise_check = QCheckBox("Denoise")
         self.denoise_check.setToolTip(
             "Apply Non-Local Means denoising to the stacked result.\n"
-            "Smooths noisy background while preserving star profiles\n"
-            "and nebula structure. No model files or GPU required."
+            "Works best on compact targets (galaxies, clusters, planetary\n"
+            "nebulae) where clear sky background is visible.\n"
+            "\n"
+            "On targets that fill the entire frame (large emission nebulae),\n"
+            "denoising may add unwanted texture — try without it first.\n"
+            "No model files or GPU required."
         )
         self.denoise_check.toggled.connect(self._on_denoise_toggled)
         denoise_row.addWidget(self.denoise_check)

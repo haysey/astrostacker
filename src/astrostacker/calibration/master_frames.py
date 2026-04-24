@@ -57,7 +57,7 @@ def _combine_frames(paths: list[str], method: str = "mean") -> np.ndarray:
 
 
 def build_master_dark(
-    dark_paths: list[str], method: str = "mean"
+    dark_paths: list[str], method: str = "median"
 ) -> np.ndarray:
     """Build a master dark frame by combining individual dark frames.
 
