@@ -58,6 +58,8 @@ hidden_imports = [
     'astrostacker.mosaic.mosaic',
     'astrostacker.mosaic.worker',
     'astrostacker.gui.mosaic_panel',
+    # Post-processing dialog (lazy import — must be listed explicitly)
+    'astrostacker.gui.postprocess_dialog',
     # Core
     'numpy',
     'requests',
