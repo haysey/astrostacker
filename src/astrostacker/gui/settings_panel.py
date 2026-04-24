@@ -1,6 +1,6 @@
 """Settings panel with modern macOS-style controls."""
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QSlider,
     QSpinBox,
     QStyle,
     QVBoxLayout,
@@ -57,6 +58,9 @@ _PERCENTILE_METHODS = {"percentile_clip"}
 
 class SettingsPanel(QWidget):
     """Panel for configuring stacking method and output settings."""
+
+    # Emitted when the user clicks Re-apply Post-Processing
+    reprocess_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -351,6 +355,115 @@ class SettingsPanel(QWidget):
 
         layout.addWidget(proc_group)
 
+        # ── Post-Processing (interactive, re-applies without re-stacking) ──
+        postproc_group = QGroupBox("Post-Processing")
+        postproc_layout = QFormLayout(postproc_group)
+        postproc_layout.setSpacing(10)
+        postproc_layout.setContentsMargins(12, 20, 12, 8)
+
+        # Star reduction row
+        star_row = QHBoxLayout()
+        star_row.setSpacing(12)
+        star_row.setContentsMargins(0, 0, 0, 0)
+
+        self.star_reduce_check = QCheckBox("Reduce stars")
+        self.star_reduce_check.setToolTip(
+            "Reduce star brightness in the stacked image.\n"
+            "Uses morphological detection (high-pass filter + Gaussian\n"
+            "mask) — no AI or model files required.\n"
+            "\n"
+            "Drag the slider to choose reduction strength, then click\n"
+            "'Re-apply Post-Processing' to preview the result.\n"
+            "Use 'Re-apply' again with a different value until happy."
+        )
+        self.star_reduce_check.toggled.connect(self._on_star_reduce_toggled)
+        star_row.addWidget(self.star_reduce_check)
+
+        self.star_reduce_slider = QSlider(Qt.Orientation.Horizontal)
+        self.star_reduce_slider.setRange(0, 100)
+        self.star_reduce_slider.setValue(50)
+        self.star_reduce_slider.setEnabled(False)
+        self.star_reduce_slider.setMinimumWidth(80)
+        self.star_reduce_slider.valueChanged.connect(self._on_star_slider_changed)
+        star_row.addWidget(self.star_reduce_slider)
+
+        self.star_reduce_label = QLabel("50%")
+        self.star_reduce_label.setFixedWidth(36)
+        star_row.addWidget(self.star_reduce_label)
+
+        postproc_layout.addRow(star_row)
+
+        # Colour balance row
+        self.colour_balance_check = QCheckBox("Colour balance")
+        self.colour_balance_check.setToolTip(
+            "Correct colour cast caused by light pollution tint,\n"
+            "airglow, or Bayer sensor green-channel dominance.\n"
+            "\n"
+            "Auto: samples sky background from image corners and\n"
+            "applies per-channel multipliers to make sky neutral grey.\n"
+            "\n"
+            "Manual: set R, G, B gain sliders yourself.\n"
+            "\n"
+            "No-op on mono cameras."
+        )
+        self.colour_balance_check.toggled.connect(self._on_colour_balance_toggled)
+        postproc_layout.addRow(self.colour_balance_check)
+
+        # Auto / Manual toggle
+        auto_row = QHBoxLayout()
+        auto_row.setSpacing(8)
+        auto_row.setContentsMargins(16, 0, 0, 0)
+        self.colour_auto_check = QCheckBox("Auto")
+        self.colour_auto_check.setChecked(True)
+        self.colour_auto_check.setEnabled(False)
+        self.colour_auto_check.setToolTip(
+            "Automatically measure sky colour from image corners\n"
+            "and neutralise any tint. Recommended default."
+        )
+        self.colour_auto_check.toggled.connect(self._on_colour_auto_toggled)
+        auto_row.addWidget(self.colour_auto_check)
+        auto_row.addStretch()
+        postproc_layout.addRow(auto_row)
+
+        # R / G / B sliders (shown when Auto is OFF)
+        for colour, attr in [("R", "r"), ("G", "g"), ("B", "b")]:
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.setContentsMargins(16, 0, 0, 0)
+            lbl = QLabel(colour)
+            lbl.setFixedWidth(14)
+            row.addWidget(lbl)
+            slider = QSlider(Qt.Orientation.Horizontal)
+            slider.setRange(50, 200)   # 0.50× – 2.00×
+            slider.setValue(100)       # 1.00× default
+            slider.setEnabled(False)
+            slider.setMinimumWidth(70)
+            val_lbl = QLabel("1.00×")
+            val_lbl.setFixedWidth(44)
+            slider.valueChanged.connect(
+                lambda v, lbl=val_lbl: lbl.setText(f"{v/100:.2f}×")
+            )
+            row.addWidget(slider)
+            row.addWidget(val_lbl)
+            setattr(self, f"colour_{attr}_slider", slider)
+            setattr(self, f"colour_{attr}_label", val_lbl)
+            postproc_layout.addRow(row)
+
+        # Re-apply button
+        self.reprocess_btn = QPushButton("Re-apply Post-Processing")
+        self.reprocess_btn.setEnabled(False)
+        self.reprocess_btn.setToolTip(
+            "Re-run gradient removal, sharpen, denoise, star reduction,\n"
+            "and colour balance on the existing stack — without\n"
+            "repeating calibration, alignment, or stacking.\n"
+            "\n"
+            "Stack once, then tweak and re-apply as many times as you like."
+        )
+        self.reprocess_btn.clicked.connect(self.reprocess_requested.emit)
+        postproc_layout.addRow(self.reprocess_btn)
+
+        layout.addWidget(postproc_group)
+
         layout.addStretch()
 
         scroll.setWidget(container)
@@ -391,6 +504,26 @@ class SettingsPanel(QWidget):
 
     def _on_deconv_toggled(self, checked: bool):
         self.deconv_strength_combo.setEnabled(checked)
+
+    def _on_star_reduce_toggled(self, checked: bool):
+        self.star_reduce_slider.setEnabled(checked)
+
+    def _on_star_slider_changed(self, value: int):
+        self.star_reduce_label.setText(f"{value}%")
+
+    def _on_colour_balance_toggled(self, checked: bool):
+        self.colour_auto_check.setEnabled(checked)
+        manual = checked and not self.colour_auto_check.isChecked()
+        self.colour_r_slider.setEnabled(manual)
+        self.colour_g_slider.setEnabled(manual)
+        self.colour_b_slider.setEnabled(manual)
+
+    def _on_colour_auto_toggled(self, checked: bool):
+        enabled = self.colour_balance_check.isChecked()
+        manual = enabled and not checked
+        self.colour_r_slider.setEnabled(manual)
+        self.colour_g_slider.setEnabled(manual)
+        self.colour_b_slider.setEnabled(manual)
 
     # ── Browse ──
 
@@ -462,6 +595,31 @@ class SettingsPanel(QWidget):
 
     def get_drizzle(self) -> bool:
         return self.drizzle_check.isChecked()
+
+    def get_star_reduce(self) -> bool:
+        return self.star_reduce_check.isChecked()
+
+    def get_star_reduce_strength(self) -> float:
+        return self.star_reduce_slider.value() / 100.0
+
+    def get_colour_balance(self) -> bool:
+        return self.colour_balance_check.isChecked()
+
+    def get_colour_balance_auto(self) -> bool:
+        return self.colour_auto_check.isChecked()
+
+    def get_colour_balance_r(self) -> float:
+        return self.colour_r_slider.value() / 100.0
+
+    def get_colour_balance_g(self) -> float:
+        return self.colour_g_slider.value() / 100.0
+
+    def get_colour_balance_b(self) -> float:
+        return self.colour_b_slider.value() / 100.0
+
+    def enable_reprocess(self, enabled: bool):
+        """Enable/disable the Re-apply button (enabled once a stack exists)."""
+        self.reprocess_btn.setEnabled(enabled)
 
     def set_max_reference(self, count: int):
         self.reference_spin.setMaximum(max(0, count - 1))

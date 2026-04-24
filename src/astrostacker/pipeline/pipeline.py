@@ -22,11 +22,13 @@ from astrostacker.io.loader import load_image, save_image
 from astrostacker.stacking.stacker import stack_images
 from astrostacker.stacking.drizzle import drizzle_stack
 from astrostacker.utils.debayer import debayer
+from astrostacker.utils.colour_balance import auto_colour_balance, apply_rgb_balance
 from astrostacker.utils.deconvolution import sharpen_image
 from astrostacker.utils.denoise import denoise_image
 from astrostacker.utils.frame_quality import score_frames
 from astrostacker.utils.gradient import remove_gradient
 from astrostacker.utils.parallel import optimal_workers, parallel_load_images
+from astrostacker.utils.star_reduction import reduce_stars
 
 
 @dataclass
@@ -79,6 +81,17 @@ class PipelineConfig:
     # Auto-crop stacking edges
     auto_crop: bool = False
 
+    # Star reduction (post-stack)
+    star_reduce: bool = False
+    star_reduce_strength: float = 0.5   # 0.0 = none, 1.0 = maximum
+
+    # Colour balance (post-stack)
+    colour_balance: bool = False
+    colour_balance_auto: bool = True    # True = auto, False = manual sliders
+    colour_balance_r: float = 1.0
+    colour_balance_g: float = 1.0
+    colour_balance_b: float = 1.0
+
 
 class Pipeline:
     """Orchestrates the full calibrate -> align -> stack pipeline."""
@@ -86,6 +99,7 @@ class Pipeline:
     def __init__(self, config: PipelineConfig):
         self.config = config
         self.cancelled = False
+        self._raw_stack: np.ndarray | None = None   # cached pre-post-processing stack
         self._status_callback: Callable[[str], None] | None = None
         self._progress_callback: Callable[[int, int, str], None] | None = None
         # Populated after run() — paths of rejected light frames
@@ -436,6 +450,50 @@ class Pipeline:
             result = stack_images(aligned, method=self.config.stacking_method, **kwargs)
         self._check_cancel()
 
+        # Cache raw stack so post-processing can be re-applied without re-stacking
+        self._raw_stack = result.copy()
+
+        result = self._run_postprocessing(result)
+
+        # Stage 5: Save
+        colour_info = "RGB colour" if result.ndim == 3 else "mono"
+        self._report(f"Saving {colour_info} result {result.shape} to {self.config.output_path}...")
+        save_image(self.config.output_path, result)
+
+        self._report("Done!")
+        return result
+
+    def reprocess(self) -> np.ndarray:
+        """Re-run post-processing on the cached raw stack.
+
+        Skips calibration, alignment, and stacking — only reruns:
+        auto-crop, gradient removal, sharpen, denoise, star reduction,
+        colour balance.  Call ``run()`` at least once first to populate
+        the cache.
+
+        Returns:
+            Post-processed result as float32 ndarray.
+
+        Raises:
+            RuntimeError: If ``run()`` has not been called yet.
+        """
+        if self._raw_stack is None:
+            raise RuntimeError(
+                "No cached stack available — run() must be called first."
+            )
+        self.cancelled = False
+        self._report("Re-applying post-processing...")
+        result = self._run_postprocessing(self._raw_stack.copy())
+
+        colour_info = "RGB colour" if result.ndim == 3 else "mono"
+        self._report(f"Saving {colour_info} result to {self.config.output_path}...")
+        save_image(self.config.output_path, result)
+        self._report("Done!")
+        return result
+
+    def _run_postprocessing(self, result: np.ndarray) -> np.ndarray:
+        """Run all post-stack processing stages on *result* and return it."""
+
         # Stage 4b: Auto-crop stacking edges (NaN/zero borders)
         if self.config.auto_crop:
             result = self._auto_crop(result)
@@ -476,12 +534,34 @@ class Pipeline:
             self._report("Denoising complete")
             self._check_cancel()
 
-        # Stage 5: Save
-        colour_info = "RGB colour" if result.ndim == 3 else "mono"
-        self._report(f"Saving {colour_info} result {result.shape} to {self.config.output_path}...")
-        save_image(self.config.output_path, result)
+        # Stage 4f: Star reduction
+        if self.config.star_reduce and self.config.star_reduce_strength > 0:
+            pct = int(round(self.config.star_reduce_strength * 100))
+            self._report(f"Reducing stars ({pct}%)...")
+            result = reduce_stars(result, strength=self.config.star_reduce_strength)
+            self._report("Star reduction complete")
+            self._check_cancel()
 
-        self._report("Done!")
+        # Stage 4g: Colour balance
+        if self.config.colour_balance and result.ndim == 3:
+            if self.config.colour_balance_auto:
+                self._report("Applying automatic colour balance...")
+                result, factors = auto_colour_balance(result)
+                self._report(
+                    f"  Colour balance — R×{factors[0]:.3f}  "
+                    f"G×{factors[1]:.3f}  B×{factors[2]:.3f}"
+                )
+            else:
+                r = self.config.colour_balance_r
+                g = self.config.colour_balance_g
+                b = self.config.colour_balance_b
+                self._report(
+                    f"Applying manual colour balance "
+                    f"(R×{r:.2f}  G×{g:.2f}  B×{b:.2f})..."
+                )
+                result = apply_rgb_balance(result, r=r, g=g, b=b)
+            self._check_cancel()
+
         return result
 
     def _auto_crop(self, data: np.ndarray) -> np.ndarray:

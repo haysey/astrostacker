@@ -685,6 +685,7 @@ class MainWindow(QMainWindow):
         self.file_panel.lights.files_changed.connect(self._on_lights_changed)
         self.mosaic_panel.build_btn.clicked.connect(self._on_build_mosaic)
         self.settings_panel.auto_solve_check.toggled.connect(self._on_auto_solve_toggled)
+        self.settings_panel.reprocess_requested.connect(self._on_reprocess)
 
     def _on_file_selected(self, path: str):
         self.preview_panel.show_file(path)
@@ -732,32 +733,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        config = PipelineConfig(
-            light_paths=light_paths,
-            dark_paths=self.file_panel.get_dark_paths(),
-            flat_paths=self.file_panel.get_flat_paths(),
-            dark_flat_paths=self.file_panel.get_dark_flat_paths(),
-            master_dark_path=self.file_panel.get_master_dark_path(),
-            master_flat_path=self.file_panel.get_master_flat_path(),
-            stacking_method=self.settings_panel.get_method(),
-            sigma_low=self.settings_panel.get_sigma_low(),
-            sigma_high=self.settings_panel.get_sigma_high(),
-            percentile_low=self.settings_panel.get_percentile_low(),
-            percentile_high=self.settings_panel.get_percentile_high(),
-            camera_type=self.settings_panel.get_camera_type(),
-            bayer_pattern=self.settings_panel.get_bayer_pattern(),
-            output_path=self.settings_panel.get_output_path(),
-            reference_frame=self.settings_panel.get_reference_frame(),
-            auto_reject=self.settings_panel.get_auto_reject(),
-            remove_gradient=self.settings_panel.get_remove_gradient(),
-            local_normalise=self.settings_panel.get_local_normalise(),
-            denoise=self.settings_panel.get_denoise(),
-            denoise_strength=self.settings_panel.get_denoise_strength(),
-            deconvolve=self.settings_panel.get_deconvolve(),
-            deconv_strength=self.settings_panel.get_deconv_strength(),
-            auto_crop=self.settings_panel.get_auto_crop(),
-            drizzle=self.settings_panel.get_drizzle(),
-        )
+        config = self._build_config(light_paths)
 
         self.progress_panel.reset()
         self.progress_panel.set_running(True)
@@ -780,9 +756,93 @@ class MainWindow(QMainWindow):
     def _on_progress(self, current: int, total: int, stage: str):
         self.progress_panel.set_progress(current, total, stage)
 
+    def _build_config(self, light_paths: list[str]) -> PipelineConfig:
+        """Build a PipelineConfig from the current UI settings."""
+        sp = self.settings_panel
+        return PipelineConfig(
+            light_paths=light_paths,
+            dark_paths=self.file_panel.get_dark_paths(),
+            flat_paths=self.file_panel.get_flat_paths(),
+            dark_flat_paths=self.file_panel.get_dark_flat_paths(),
+            master_dark_path=self.file_panel.get_master_dark_path(),
+            master_flat_path=self.file_panel.get_master_flat_path(),
+            stacking_method=sp.get_method(),
+            sigma_low=sp.get_sigma_low(),
+            sigma_high=sp.get_sigma_high(),
+            percentile_low=sp.get_percentile_low(),
+            percentile_high=sp.get_percentile_high(),
+            camera_type=sp.get_camera_type(),
+            bayer_pattern=sp.get_bayer_pattern(),
+            output_path=sp.get_output_path(),
+            reference_frame=sp.get_reference_frame(),
+            auto_reject=sp.get_auto_reject(),
+            remove_gradient=sp.get_remove_gradient(),
+            local_normalise=sp.get_local_normalise(),
+            denoise=sp.get_denoise(),
+            denoise_strength=sp.get_denoise_strength(),
+            deconvolve=sp.get_deconvolve(),
+            deconv_strength=sp.get_deconv_strength(),
+            auto_crop=sp.get_auto_crop(),
+            drizzle=sp.get_drizzle(),
+            star_reduce=sp.get_star_reduce(),
+            star_reduce_strength=sp.get_star_reduce_strength(),
+            colour_balance=sp.get_colour_balance(),
+            colour_balance_auto=sp.get_colour_balance_auto(),
+            colour_balance_r=sp.get_colour_balance_r(),
+            colour_balance_g=sp.get_colour_balance_g(),
+            colour_balance_b=sp.get_colour_balance_b(),
+        )
+
+    def _on_reprocess(self):
+        """Re-apply post-processing on the cached stack without re-stacking."""
+        if self._worker is None or self._worker.pipeline._raw_stack is None:
+            QMessageBox.information(
+                self,
+                "No Stack Available",
+                "Please run a full stack first before using Re-apply.",
+            )
+            return
+
+        if self._thread is not None and self._thread.isRunning():
+            return  # already busy
+
+        # Update the pipeline config with current UI settings (post-processing
+        # fields only — light_paths etc. are irrelevant for reprocess())
+        sp = self.settings_panel
+        cfg = self._worker.pipeline.config
+        cfg.remove_gradient = sp.get_remove_gradient()
+        cfg.denoise = sp.get_denoise()
+        cfg.denoise_strength = sp.get_denoise_strength()
+        cfg.deconvolve = sp.get_deconvolve()
+        cfg.deconv_strength = sp.get_deconv_strength()
+        cfg.auto_crop = sp.get_auto_crop()
+        cfg.star_reduce = sp.get_star_reduce()
+        cfg.star_reduce_strength = sp.get_star_reduce_strength()
+        cfg.colour_balance = sp.get_colour_balance()
+        cfg.colour_balance_auto = sp.get_colour_balance_auto()
+        cfg.colour_balance_r = sp.get_colour_balance_r()
+        cfg.colour_balance_g = sp.get_colour_balance_g()
+        cfg.colour_balance_b = sp.get_colour_balance_b()
+
+        self.progress_panel.reset()
+        self.progress_panel.set_running(True)
+        self.frame_status_bar.set_status("Re-processing...")
+        self.progress_panel.log("Re-applying post-processing (no re-stack)...")
+
+        # Run reprocess() on a fresh thread, reusing the same pipeline object
+        self._thread = QThread()
+        self._thread.setStackSize(16 * 1024 * 1024)
+        self._worker.moveToThread(self._thread)
+        self._thread.started.connect(self._worker.reprocess)
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.error.connect(self._thread.quit)
+        self._worker.cancelled.connect(self._thread.quit)
+        self._thread.finished.connect(self._on_thread_done)
+        self._thread.start()
+
     def _on_finished(self, result: np.ndarray):
-        self.progress_panel.log("Stacking complete!")
-        self.progress_panel.set_progress(100, 100, "Stacking done")
+        self.progress_panel.log("Processing complete!")
+        self.progress_panel.set_progress(100, 100, "Done")
         self.preview_panel.show_data(result, info="Stacked Result")
         self.histogram_panel.set_data(result)
 
@@ -790,8 +850,11 @@ class MainWindow(QMainWindow):
         total = len(self.file_panel.get_light_paths())
         rejected = self._worker.pipeline.rejected_paths if self._worker else []
         accepted = self._worker.pipeline.accepted_count if self._worker else total
-        self.frame_status_bar.set_status("Stacking complete")
+        self.frame_status_bar.set_status("Complete")
         self.frame_status_bar.set_frame_counts(total, accepted, rejected)
+
+        # Enable Re-apply now that a stack is cached
+        self.settings_panel.enable_reprocess(True)
 
         # Embed WCS from a previous plate solve if available
         self._embed_existing_wcs()

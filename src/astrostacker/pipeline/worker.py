@@ -43,12 +43,23 @@ class PipelineWorker(QObject):
         self.pipeline.cancel()
 
     def run(self):
-        """Execute the pipeline. Called from the worker thread."""
+        """Execute the full pipeline. Called from the worker thread."""
         try:
             result = self.pipeline.run()
             self.finished.emit(result)
         except InterruptedError:
             self.status_update.emit("Pipeline cancelled.")
+            self.cancelled.emit()
+        except Exception as e:
+            self.error.emit(f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
+
+    def reprocess(self):
+        """Re-run post-processing only on the cached stack. Called from the worker thread."""
+        try:
+            result = self.pipeline.reprocess()
+            self.finished.emit(result)
+        except InterruptedError:
+            self.status_update.emit("Re-processing cancelled.")
             self.cancelled.emit()
         except Exception as e:
             self.error.emit(f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
