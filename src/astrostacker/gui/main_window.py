@@ -801,10 +801,8 @@ class MainWindow(QMainWindow):
         """
         from astrostacker.gui.postprocess_dialog import PostProcessDialog
 
-        # Prefer the cached raw stack (set after any full pipeline run)
+        # Prefer the cached pipeline-processed stack (set in _on_finished)
         raw = self._raw_stack
-        if raw is None and self._worker is not None:
-            raw = self._worker.pipeline._raw_stack
 
         if raw is not None:
             self.progress_panel.log("Opening post-processing window…")
@@ -843,10 +841,12 @@ class MainWindow(QMainWindow):
         self.preview_panel.show_data(result, info="Stacked Result")
         self.histogram_panel.set_data(result)
 
-        # Cache the pre-post-processing raw stack so Re-apply and
-        # PostProcessDialog can work even after this worker is cleared.
-        if self._worker is not None and self._worker.pipeline._raw_stack is not None:
-            self._raw_stack = self._worker.pipeline._raw_stack.copy()
+        # Cache the fully pipeline-processed result for PostProcessDialog.
+        # Using the pipeline output (gradient-corrected, auto-cropped, etc.)
+        # ensures the dialog starts from the same data as the saved FITS file
+        # and the main preview — avoiding the green cast that raw debayered
+        # data has before gradient removal's sky neutralisation runs.
+        self._raw_stack = result.copy()
 
         # Update frame status bar with rejection info
         total = len(self.file_panel.get_light_paths())
