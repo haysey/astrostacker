@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QPoint, QRect, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QRubberBand,
     QScrollArea,
     QStyle,
     QVBoxLayout,
@@ -26,10 +27,20 @@ from astrostacker.utils.stretch import auto_stretch, linear_stretch
 class PreviewPanel(QWidget):
     """Image preview with stretch modes and zoom."""
 
+    crop_selected = pyqtSignal(int, int, int, int)  # x, y, w, h in original image pixels
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._raw_data: np.ndarray | None = None
         self._current_pixmap: QPixmap | None = None
+        self._crop_mode = False
+        self._crop_start: QPoint | None = None
+        self._rubber_band: QRubberBand | None = None
+        # When set, _refresh_display uses these precomputed stretch params
+        # instead of recomputing them from the current data.  This lets the
+        # post-processing dialog lock the display scale to the original image
+        # so effects like star reduction are visible rather than compensated.
+        self._fixed_stretch_params: tuple | None = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -113,6 +124,7 @@ class PreviewPanel(QWidget):
         self.image_label.setTextFormat(Qt.TextFormat.RichText)
         self.image_label.setText(self._empty_html)
         self.scroll_area.setWidget(self.image_label)
+        self.image_label.installEventFilter(self)
 
         layout.addWidget(self.scroll_area)
 
@@ -123,8 +135,9 @@ class PreviewPanel(QWidget):
         except Exception as e:
             self.image_label.setText(f"Error loading image:\n{e}")
 
-    def show_data(self, data: np.ndarray, info: str = ""):
+    def show_data(self, data: np.ndarray, info: str = "", fixed_stretch_params: tuple | None = None):
         self._raw_data = data
+        self._fixed_stretch_params = fixed_stretch_params
         self.save_btn.setEnabled(True)
         shape_str = f"{data.shape[1]} x {data.shape[0]}"
         if data.ndim == 3:
@@ -136,11 +149,26 @@ class PreviewPanel(QWidget):
         if self._raw_data is None:
             return
 
-        stretch_mode = self.stretch_combo.currentText()
-        if stretch_mode == "Auto STF":
-            display_data = auto_stretch(self._raw_data)
+        if self._fixed_stretch_params is not None:
+            # Use locked stretch params so the display scale stays consistent
+            # across before/after comparisons (e.g. star reduction preview).
+            from astrostacker.utils.stretch import _apply_stretch_params
+            shadow, highlight, midtone = self._fixed_stretch_params
+            arr = self._raw_data.astype(np.float64)
+            if arr.ndim == 3:
+                channels = [
+                    _apply_stretch_params(arr[:, :, c], shadow, highlight, midtone)
+                    for c in range(arr.shape[2])
+                ]
+                display_data = np.stack(channels, axis=2)
+            else:
+                display_data = _apply_stretch_params(arr, shadow, highlight, midtone)
         else:
-            display_data = linear_stretch(self._raw_data)
+            stretch_mode = self.stretch_combo.currentText()
+            if stretch_mode == "Auto STF":
+                display_data = auto_stretch(self._raw_data)
+            else:
+                display_data = linear_stretch(self._raw_data)
 
         pixmap = numpy_to_qpixmap(display_data)
         self._current_pixmap = pixmap
@@ -176,6 +204,61 @@ class PreviewPanel(QWidget):
         super().resizeEvent(event)
         if self._current_pixmap and self.zoom_combo.currentText() == "Fit":
             self._refresh_display()
+
+    def set_crop_mode(self, enabled: bool):
+        """Enter or exit crop-selection mode."""
+        self._crop_mode = enabled
+        cursor = Qt.CursorShape.CrossCursor if enabled else Qt.CursorShape.ArrowCursor
+        self.image_label.setCursor(cursor)
+        if not enabled and self._rubber_band is not None:
+            self._rubber_band.hide()
+
+    def _screen_to_image(self, label_pos: QPoint) -> tuple[int, int]:
+        """Convert a point in image_label coordinates to original image pixel coords."""
+        if self._raw_data is None:
+            return 0, 0
+        pm = self.image_label.pixmap()
+        if pm is None or pm.isNull():
+            return 0, 0
+        # Qt centres the pixmap inside the label (due to AlignCenter).
+        off_x = max(0, (self.image_label.width()  - pm.width())  // 2)
+        off_y = max(0, (self.image_label.height() - pm.height()) // 2)
+        px = label_pos.x() - off_x
+        py = label_pos.y() - off_y
+        orig_h, orig_w = self._raw_data.shape[:2]
+        scale_x = orig_w / max(1, pm.width())
+        scale_y = orig_h / max(1, pm.height())
+        ix = int(max(0, min(orig_w - 1, px * scale_x)))
+        iy = int(max(0, min(orig_h - 1, py * scale_y)))
+        return ix, iy
+
+    def eventFilter(self, obj, event):
+        from PyQt6.QtCore import QEvent
+        if obj is self.image_label and self._crop_mode and self._raw_data is not None:
+            t = event.type()
+            if t == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+                self._crop_start = event.pos()
+                if self._rubber_band is None:
+                    self._rubber_band = QRubberBand(QRubberBand.Shape.Rectangle, self.image_label)
+                self._rubber_band.setGeometry(QRect(self._crop_start, self._crop_start))
+                self._rubber_band.show()
+                return True
+            elif t == QEvent.Type.MouseMove and self._crop_start is not None:
+                if self._rubber_band is not None:
+                    self._rubber_band.setGeometry(QRect(self._crop_start, event.pos()).normalized())
+                return True
+            elif t == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+                if self._crop_start is not None:
+                    rect = QRect(self._crop_start, event.pos()).normalized()
+                    x1, y1 = self._screen_to_image(rect.topLeft())
+                    x2, y2 = self._screen_to_image(rect.bottomRight())
+                    w = max(0, x2 - x1)
+                    h = max(0, y2 - y1)
+                    if w >= 10 and h >= 10:
+                        self.crop_selected.emit(x1, y1, w, h)
+                    self._crop_start = None
+                return True
+        return super().eventFilter(obj, event)
 
     def _save_image(self):
         """Save the current image data to a user-chosen location."""

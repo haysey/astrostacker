@@ -286,6 +286,7 @@ def draw_cover(canvas, doc):
     features = [
         "Full calibration pipeline  ·  9 stacking methods",
         "PSF frame rejection  ·  Drizzle super-resolution",
+        "Star reduction  ·  Colour balance  ·  Crop tool",
         "Plate solving & WCS embedding  ·  Mosaic builder",
         "Non-Local Means denoise  ·  PSF-informed sharpening",
     ]
@@ -716,13 +717,14 @@ SECTIONS = [
     ("7",  "Processing Options"),
     ("8",  "Running the Pipeline"),
     ("9",  "Preview Panel & Histogram"),
-    ("10", "Plate Solve Tab"),
-    ("11", "Mosaic Tab"),
-    ("12", "Tools Menu"),
-    ("13", "File Menu"),
-    ("14", "Stacking Strategy Guide"),
-    ("15", "Troubleshooting"),
-    ("16", "Glossary"),
+    ("10", "Post-Processing Window"),
+    ("11", "Plate Solve Tab"),
+    ("12", "Mosaic Tab"),
+    ("13", "Tools Menu"),
+    ("14", "File Menu"),
+    ("15", "Stacking Strategy Guide"),
+    ("16", "Troubleshooting"),
+    ("17", "Glossary"),
 ]
 
 

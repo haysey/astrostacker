@@ -37,6 +37,7 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -45,6 +46,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSlider,
+    QSpinBox,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -111,11 +113,14 @@ class PostProcessDialog(QDialog):
         self._showing_original = False                   # toggle state
         self._worker: _PostProcessWorker | None = None
         self._thread: QThread | None = None
+        self._crop_rect: tuple[int, int, int, int] | None = None  # x, y, w, h in image pixels
+        self._ref_stretch_params: tuple | None = None  # locked display scale for before/after
 
         self._setup_ui()
 
         # Show the raw stack right away
         self.preview.show_data(raw_stack, info="Original (unprocessed)")
+        self.preview.crop_selected.connect(self._on_crop_selected)
 
     # ── UI ─────────────────────────────────────────────────────────────────
 
@@ -158,13 +163,37 @@ class PostProcessDialog(QDialog):
         )
         toggle_layout.addWidget(self._compare_label, stretch=1)
 
+        self._crop_btn = QPushButton("✂  Crop")
+        self._crop_btn.setObjectName("secondaryButton")
+        self._crop_btn.setCheckable(True)
+        self._crop_btn.setToolTip(
+            "Draw a rectangle on the image to select the crop region.\n"
+            "Click Apply after setting the crop to preview the result."
+        )
+        self._crop_btn.toggled.connect(self._on_crop_toggled)
+        toggle_layout.addWidget(self._crop_btn)
+
+        self._crop_info_label = QLabel("")
+        self._crop_info_label.setStyleSheet(
+            "color: rgba(255,149,0,0.85); font-size: 11px; font-weight: 600;"
+        )
+        self._crop_info_label.hide()
+        toggle_layout.addWidget(self._crop_info_label)
+
+        self._clear_crop_btn = QPushButton("✕ Clear")
+        self._clear_crop_btn.setObjectName("secondaryButton")
+        self._clear_crop_btn.setToolTip("Remove the crop selection.")
+        self._clear_crop_btn.clicked.connect(self._on_clear_crop)
+        self._clear_crop_btn.hide()
+        toggle_layout.addWidget(self._clear_crop_btn)
+
         left_layout.addWidget(toggle_bar)
         root.addWidget(left, stretch=3)
 
         # ── Right: controls + action buttons ───────────────────────────────
         right = QWidget()
         right.setObjectName("ppRight")
-        right.setFixedWidth(300)
+        right.setFixedWidth(330)
         right.setStyleSheet(
             "QWidget#ppRight {"
             "  background-color: rgba(12, 12, 22, 0.95);"
@@ -287,14 +316,24 @@ class PostProcessDialog(QDialog):
         self.star_slider.setRange(0, 100)
         self.star_slider.setValue(50)
         self.star_slider.setEnabled(False)
-        self.star_slider.valueChanged.connect(
-            lambda v: self.star_pct_label.setText(f"{v}%")
-        )
         star_slider_row.addWidget(self.star_slider)
-        self.star_pct_label = QLabel("50%")
-        self.star_pct_label.setFixedWidth(36)
-        self.star_pct_label.setStyleSheet("color: rgba(255,255,255,0.7);")
-        star_slider_row.addWidget(self.star_pct_label)
+        self.star_spinbox = QSpinBox()
+        self.star_spinbox.setRange(0, 100)
+        self.star_spinbox.setSuffix("%")
+        self.star_spinbox.setValue(50)
+        self.star_spinbox.setFixedWidth(72)
+        self.star_spinbox.setEnabled(False)
+        self.star_slider.valueChanged.connect(
+            lambda v: (self.star_spinbox.blockSignals(True),
+                       self.star_spinbox.setValue(v),
+                       self.star_spinbox.blockSignals(False))
+        )
+        self.star_spinbox.valueChanged.connect(
+            lambda v: (self.star_slider.blockSignals(True),
+                       self.star_slider.setValue(v),
+                       self.star_slider.blockSignals(False))
+        )
+        star_slider_row.addWidget(self.star_spinbox)
         ctrl_layout.addLayout(star_slider_row)
 
         ctrl_layout.addSpacing(4)
@@ -331,17 +370,26 @@ class PostProcessDialog(QDialog):
             slider.setRange(50, 200)
             slider.setValue(100)
             slider.setEnabled(False)
-            val_lbl = QLabel("1.00×")
-            val_lbl.setFixedWidth(44)
-            val_lbl.setStyleSheet("color: rgba(255,255,255,0.7);")
+            spinbox = QDoubleSpinBox()
+            spinbox.setRange(0.50, 2.00)
+            spinbox.setSingleStep(0.05)
+            spinbox.setDecimals(2)
+            spinbox.setSuffix("×")
+            spinbox.setValue(1.00)
+            spinbox.setFixedWidth(76)
+            spinbox.setEnabled(False)
+            # Bidirectional sync (blockSignals prevents feedback loops)
             slider.valueChanged.connect(
-                lambda v, l=val_lbl: l.setText(f"{v / 100:.2f}×")
+                lambda v, s=spinbox: (s.blockSignals(True), s.setValue(v / 100.0), s.blockSignals(False))
+            )
+            spinbox.valueChanged.connect(
+                lambda v, sl=slider: (sl.blockSignals(True), sl.setValue(round(v * 100)), sl.blockSignals(False))
             )
             row.addWidget(slider)
-            row.addWidget(val_lbl)
+            row.addWidget(spinbox)
             ctrl_layout.addLayout(row)
             setattr(self, f"colour_{attr}_slider", slider)
-            setattr(self, f"colour_{attr}_label", val_lbl)
+            setattr(self, f"colour_{attr}_spinbox", spinbox)
 
         ctrl_layout.addStretch()
 
@@ -359,13 +407,17 @@ class PostProcessDialog(QDialog):
         right_layout.addWidget(self._status_label)
 
         # ── Action buttons ──────────────────────────────────────────────────
+        # Separate 1px divider — avoids CSS border-top on actions which can
+        # cause Qt to clip child widgets near the top of the container.
+        actions_hr = QWidget()
+        actions_hr.setFixedHeight(1)
+        actions_hr.setStyleSheet("background-color: rgba(255,255,255,0.08);")
+        right_layout.addWidget(actions_hr)
+
         actions = QWidget()
-        actions.setStyleSheet(
-            "background-color: rgba(12, 12, 22, 0.98);"
-            "border-top: 1px solid rgba(255,255,255,0.08);"
-        )
+        actions.setStyleSheet("background-color: rgba(12, 12, 22, 0.98);")
         actions_layout = QVBoxLayout(actions)
-        actions_layout.setContentsMargins(12, 10, 12, 12)
+        actions_layout.setContentsMargins(12, 12, 12, 12)
         actions_layout.setSpacing(6)
 
         self.apply_btn = QPushButton("▶   Apply")
@@ -432,18 +484,21 @@ class PostProcessDialog(QDialog):
 
     def _on_star_reduce_toggled(self, checked: bool):
         self.star_slider.setEnabled(checked)
+        self.star_spinbox.setEnabled(checked)
 
     def _on_colour_balance_toggled(self, checked: bool):
         self.colour_auto_check.setEnabled(checked)
         manual = checked and not self.colour_auto_check.isChecked()
         for attr in ("r", "g", "b"):
             getattr(self, f"colour_{attr}_slider").setEnabled(manual)
+            getattr(self, f"colour_{attr}_spinbox").setEnabled(manual)
 
     def _on_colour_auto_toggled(self, checked: bool):
         enabled = self.colour_check.isChecked()
         manual = enabled and not checked
         for attr in ("r", "g", "b"):
             getattr(self, f"colour_{attr}_slider").setEnabled(manual)
+            getattr(self, f"colour_{attr}_spinbox").setEnabled(manual)
 
     def _on_toggle_original(self, checked: bool):
         self._showing_original = checked
@@ -456,7 +511,62 @@ class PostProcessDialog(QDialog):
             self.preview.show_data(
                 self._processed,
                 info=f"Post-processed  {w}×{h}  {chan}",
+                fixed_stretch_params=self._ref_stretch_params,
             )
+
+    def _on_crop_toggled(self, checked: bool):
+        self.preview.set_crop_mode(checked)
+        if checked:
+            self._compare_label.setText(
+                "Draw a rectangle on the image to select the crop region."
+            )
+        else:
+            self._compare_label.setText(
+                "Click  ▶ Apply  on the right to preview post-processing changes"
+            )
+
+    def _on_crop_selected(self, x: int, y: int, w: int, h: int):
+        """Called when the user finishes drawing a crop rectangle."""
+        self._crop_rect = (x, y, w, h)
+        self._crop_btn.setChecked(False)          # exit crop mode automatically
+        self.preview.set_crop_mode(False)
+        self._crop_info_label.setText(f"Crop: {w}×{h} px")
+        self._crop_info_label.show()
+        self._clear_crop_btn.show()
+        self._compare_label.setText(
+            f"Crop set ({w}×{h} px at {x},{y}).  Click ▶ Apply to preview."
+        )
+
+    def _on_clear_crop(self):
+        """Remove the active crop selection."""
+        self._crop_rect = None
+        self._crop_btn.setChecked(False)
+        self.preview.set_crop_mode(False)
+        self._crop_info_label.hide()
+        self._clear_crop_btn.hide()
+        self.preview.show_data(self._raw_stack, info="Original (unprocessed)")
+        self._compare_label.setText(
+            "Click  ▶ Apply  on the right to preview post-processing changes"
+        )
+
+    # ── Stretch helpers ─────────────────────────────────────────────────────
+
+    @staticmethod
+    def _compute_ref_stretch(data: np.ndarray) -> tuple:
+        """Compute luminance-based stretch params from *data* for locked display.
+
+        Using these params on the processed result (instead of auto-stretching
+        it) keeps the display scale identical to the original, so changes like
+        star reduction are visible rather than being silently compensated by
+        the auto-stretch renormalisation.
+        """
+        from astrostacker.utils.stretch import _compute_stretch_params
+        arr = data.astype(np.float64)
+        if arr.ndim == 3:
+            lum = 0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
+        else:
+            lum = arr
+        return _compute_stretch_params(lum, target_background=0.25)
 
     # ── Config builder ──────────────────────────────────────────────────────
 
@@ -485,13 +595,14 @@ class PostProcessDialog(QDialog):
         if self._thread is not None and self._thread.isRunning():
             return
 
-        # Make sure at least one option is enabled
+        # Make sure at least one option is enabled (or a crop region is set —
+        # Apply with only a crop still produces a useful cropped preview).
         config = self._build_config()
         nothing_selected = not any([
             config.auto_crop, config.remove_gradient,
             config.deconvolve, config.denoise,
             config.star_reduce, config.colour_balance,
-        ])
+        ]) and self._crop_rect is None
         if nothing_selected:
             self._status_label.setText(
                 "Enable at least one option above before clicking Apply."
@@ -501,7 +612,19 @@ class PostProcessDialog(QDialog):
         self._set_busy(True)
         self._status_label.setText("Processing — please wait…")
 
-        self._worker = _PostProcessWorker(self._raw_stack, config)
+        # Apply crop region if one has been drawn
+        raw_for_worker = self._raw_stack
+        if self._crop_rect is not None:
+            cx, cy, cw, ch = self._crop_rect
+            raw_for_worker = self._raw_stack[cy:cy + ch, cx:cx + cw]
+
+        # Lock the display scale to the original (pre-processing) data so that
+        # the processed preview is shown on the same axis.  Without this the
+        # auto-stretch re-normalises star-reduced data back to the same
+        # brightness, making the effect invisible in the preview.
+        self._ref_stretch_params = self._compute_ref_stretch(raw_for_worker)
+
+        self._worker = _PostProcessWorker(raw_for_worker, config)
         self._thread = QThread()
         self._thread.setStackSize(16 * 1024 * 1024)
         self._worker.moveToThread(self._thread)
@@ -527,6 +650,7 @@ class PostProcessDialog(QDialog):
         if self._thread is not None and self._thread.isRunning():
             return
         self._processed = None
+        self._ref_stretch_params = None
         self._orig_btn.setEnabled(False)
         self._orig_btn.setChecked(False)
         self._orig_btn.setText("Show Original")
@@ -534,6 +658,11 @@ class PostProcessDialog(QDialog):
             "Click  ▶ Apply  on the right to preview post-processing changes"
         )
         self.preview.show_data(self._raw_stack, info="Original (unprocessed)")
+        self._crop_rect = None
+        self._crop_btn.setChecked(False)
+        self.preview.set_crop_mode(False)
+        self._crop_info_label.hide()
+        self._clear_crop_btn.hide()
         self._status_label.setText("Reset to original.")
 
     @pyqtSlot(np.ndarray)
@@ -542,7 +671,9 @@ class PostProcessDialog(QDialog):
         h, w = result.shape[:2]
         chan = "RGB" if result.ndim == 3 else "mono"
         info = f"Post-processed  {w}×{h}  {chan}"
-        self.preview.show_data(result, info=info)
+        # Show with the locked stretch so changes are visible vs original
+        self.preview.show_data(result, info=info,
+                               fixed_stretch_params=self._ref_stretch_params)
         self._status_label.setText("✓  Done — compare with original using the button.")
         self._orig_btn.setEnabled(True)
         self._orig_btn.setChecked(False)
@@ -585,6 +716,8 @@ class PostProcessDialog(QDialog):
 
         path, _ = QFileDialog.getSaveFileName(self, "Save Image", "", filter_str)
         if not path:
+            self.raise_()
+            self.activateWindow()
             return
 
         p = Path(path)
@@ -605,6 +738,9 @@ class PostProcessDialog(QDialog):
             QMessageBox.information(self, "Saved", f"Image saved to:\n{path}")
         except Exception as e:
             QMessageBox.critical(self, "Save Error", str(e))
+        finally:
+            self.raise_()
+            self.activateWindow()
 
     # ── Cleanup ─────────────────────────────────────────────────────────────
 

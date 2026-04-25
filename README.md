@@ -49,6 +49,13 @@ The first full release of Haysey's Astrostacker. Everything in one place.
 - Blink comparator — flip between frames to spot trailing, gradients, or artefacts
 - Export as FITS, TIFF, or PNG
 
+**Post-Processing:**
+- **Interactive Post-Processing Window** — open any stacked result for real-time fine-tuning with instant before/after comparison toggle
+- **Star brightness reduction** — morphological star detection and reduction using classical algorithms (no AI, no model files). Slider + manual spinbox for precise control (0–100%)
+- **Colour balance** — manual R/G/B channel multipliers (0.50×–2.00×) with sliders and direct numeric spinbox entry. Auto mode neutralises colour casts automatically. Luminance-linked stretch keeps adjustments visible in the preview.
+- **Interactive crop** — draw a selection rectangle directly on the preview image to crop the stacked result
+- **Multi-format export** — save the post-processed result as FITS, TIFF, JPEG, or PNG directly from the window
+
 **Visual:**
 - Dark theme UI, orange accents, card-style panels, animated progress bar
 
@@ -70,9 +77,10 @@ Haysey's Astrostacker handles the entire workflow:
 8. **Gradient removal** — subtract light pollution gradients
 9. **Sharpen** — PSF-informed sharpening (Light/Medium/Strong)
 10. **Denoise** — Non-Local Means noise reduction (Light/Medium/Strong)
-11. **Plate Solve** — identify exactly where in the sky your image points
-12. **Mosaic** — stitch multiple plate-solved panels into a wide-field image
-13. **Export** — save as FITS, TIFF, or PNG
+11. **Post-process** — star reduction, colour balance, and crop in the interactive Post-Processing window
+12. **Plate Solve** — identify exactly where in the sky your image points
+13. **Mosaic** — stitch multiple plate-solved panels into a wide-field image
+14. **Export** — save as FITS, TIFF, JPEG, or PNG
 
 ---
 
@@ -96,6 +104,8 @@ Haysey's Astrostacker handles the entire workflow:
 - **Local normalisation** — per-frame gradient removal before alignment, for multi-hour sessions where sky brightness changed between frames. Note: not recommended for targets that fill the entire field of view (large emission nebulae) — use post-stack gradient removal instead
 - **Non-Local Means denoising** — classical NLM noise reduction (Buades et al. 2005) with automatic noise estimation and Light/Medium/Strong presets. Preserves star profiles and nebula structure.
 - **Auto-crop** — trims the black/NaN borders left by frame alignment for a clean rectangular result
+- **Post-processing window** — open any stacked result for interactive fine-tuning: star reduction, colour balance, and a drag-to-select crop tool. Compare before and after with one click. Save directly as FITS, TIFF, JPEG, or PNG.
+- **Star brightness reduction** — morphological approach using high-pass peak detection, Gaussian mask painting, and dual-scale background estimation. Reduces stellar halos while preserving nebulosity and sky gradients underneath. No AI or model files.
 
 ### Plate Solving
 - **Integrated plate solver** — uses Astrometry.net to identify objects in your image
@@ -299,7 +309,17 @@ If you see a "permission denied" error on the desktop shortcut:
 - A chime will sound when processing is complete
 - Your stacked image appears in the Preview panel with a live histogram
 
-#### 5. Plate Solve (Optional)
+#### 5. Post-Process Your Result (Optional)
+
+After stacking completes, click **File > Post-Process…** to open the Post-Processing window:
+
+- **Star brightness reduction** — reduce dominant stars so faint nebulosity shows through. Drag the Strength slider (50–70% is a good starting point) and click Apply.
+- **Colour balance** — tick **Enable colour balance** and leave **Auto (recommended)** on for a one-click colour correction. Or uncheck Auto and use the R/G/B sliders to tune manually.
+- **Crop** — click **✂ Crop**, drag a rectangle on the preview image, then click Apply to crop the result.
+
+Use the **Show Original** toggle to compare before and after. When you're happy, save directly as FITS, TIFF, JPEG, or PNG from the Post-Processing window.
+
+#### 6. Plate Solve (Optional)
 
 Plate solving identifies exactly where your image points in the sky and which objects are in the frame. This also embeds WCS (World Coordinate System) data into your FITS file, which is required by tools like PixInsight's SPCC (Spectrophotometric Color Calibration).
 
@@ -310,11 +330,55 @@ Plate solving identifies exactly where your image points in the sky and which ob
 
 > **Auto plate solve:** If you tick **Auto plate solve after stacking** in Settings, the scale hints you set in the Plate Solve tab are used automatically. Set them up once in the Plate Solve tab before using this option.
 
-#### 6. Export Your Result
+#### 7. Export Your Result
 
 - Use **File > Export as TIFF** or **File > Export as PNG** for a stretched image ready to share
 - Use **Save As** in the preview toolbar for raw FITS or XISF data
+- From the Post-Processing window, save as FITS, TIFF, JPEG, or PNG directly
 - Your stacked FITS file is also saved automatically to the output path
+
+---
+
+## Post-Processing Window
+
+After stacking, open **File > Post-Process…** to launch the interactive Post-Processing window. It works on any stacked image — not just the result of the current session.
+
+All changes are non-destructive: your original FITS file is never touched. Every Apply starts from the original data, so you can freely adjust and re-apply.
+
+### Star Brightness Reduction
+
+Stars can dominate a widefield image and mask faint nebulosity. The star reducer uses a classical morphological approach — no AI, no model files required:
+
+1. A high-pass filter isolates point sources from soft background structure
+2. Peak detection finds star centres across the full image
+3. Gaussian masks are painted over each star's disc and halo
+4. The stellar signal above the local sky background is subtracted at the selected Strength
+
+Background estimation uses a dual-scale approach (25 px near / 100 px far) so halos are cleanly reduced without leaving glowing rings. Nebulosity and sky gradients beneath the stars are always preserved.
+
+**How to use:** tick **Reduce stars**, set Strength (0–100%; start at 50%), click **▶ Apply**. Use **Show Original** to compare.
+
+### Colour Balance
+
+Corrects colour casts from light pollution, airglow, or sensor bias.
+
+- **Auto (recommended):** samples the sky background corners and neutralises any tint automatically — just tick the checkbox.
+- **Manual:** uncheck Auto to reveal R, G, and B multiplier sliders (0.50×–2.00×). Each slider has a numeric spinbox for direct entry.
+
+### Crop Tool
+
+Click **✂ Crop**, drag a rectangle on the preview, then Apply. The crop is applied to the original unprocessed stack and can be combined with any other option in the same Apply pass.
+
+### Saving
+
+From the Post-Processing window you can save directly as:
+
+| Format | Description |
+|--------|-------------|
+| **FITS** | 32-bit float — best for further processing in PixInsight or Siril |
+| **TIFF** | 8-bit auto-stretched — for Photoshop, GIMP, Lightroom |
+| **JPEG** | 8-bit compressed — for web sharing and online posting |
+| **PNG** | 8-bit lossless — for sharing without compression artefacts |
 
 ---
 

@@ -47,33 +47,41 @@ TABLE OF CONTENTS
        8.3  Cancelling a Run
        8.4  What Happens Behind the Scenes
   9.  Preview Panel & Histogram
- 10.  Plate Solve Tab
-       10.1 What is Plate Solving?
-       10.2 Getting a Free API Key
-       10.3 Setting Scale Hints (Strongly Recommended)
-       10.4 Finding Your Focal Length
-       10.5 Finding Your Camera Pixel Size
-       10.6 Manual Plate Solving
-       10.7 The Solve Result Window
-       10.8 Embedding WCS into Any FITS File
-       10.9 Auto Plate Solve After Stacking
- 11.  Mosaic Tab
- 12.  Tools Menu
-       12.1 Blink Comparator
-       12.2 View FITS Header
-       12.3 Setup Wizard
-       12.4 About
- 13.  File Menu
-       13.1 Save Session / Load Session
-       13.2 Export as TIFF / PNG
- 14.  Stacking Strategy Guide
-       14.1 Choosing the Right Stacking Method
-       14.2 How Many Frames Do I Need?
-       14.3 Calibration Frame Guide
-       14.4 Colour vs. Mono Cameras
-       14.5 Drizzle — When to Use It
- 15.  Troubleshooting
- 16.  Glossary
+ 10.  Post-Processing Window
+       10.1 How the Preview Works
+       10.2 Cleanup
+       10.3 Enhance
+       10.4 Star Brightness Reduction
+       10.5 Colour Balance
+       10.6 Crop Tool
+       10.7 Applying Changes and Saving
+ 11.  Plate Solve Tab
+       11.1 What is Plate Solving?
+       11.2 Getting a Free API Key
+       11.3 Setting Scale Hints (Strongly Recommended)
+       11.4 Finding Your Focal Length
+       11.5 Finding Your Camera Pixel Size
+       11.6 Manual Plate Solving
+       11.7 The Solve Result Window
+       11.8 Embedding WCS into Any FITS File
+       11.9 Auto Plate Solve After Stacking
+ 12.  Mosaic Tab
+ 13.  Tools Menu
+       13.1 Blink Comparator
+       13.2 View FITS Header
+       13.3 Setup Wizard
+       13.4 About
+ 14.  File Menu
+       14.1 Save Session / Load Session
+       14.2 Export as TIFF / PNG
+ 15.  Stacking Strategy Guide
+       15.1 Choosing the Right Stacking Method
+       15.2 How Many Frames Do I Need?
+       15.3 Calibration Frame Guide
+       15.4 Colour vs. Mono Cameras
+       15.5 Drizzle — When to Use It
+ 16.  Troubleshooting
+ 17.  Glossary
 
 
 ================================================================================
@@ -100,11 +108,12 @@ Key features:
   - Non-Local Means denoising
   - PSF-informed sharpening (Richardson-Lucy / unsharp-mask hybrid)
   - Drizzle 2x super-resolution stacking
+  - Interactive post-processing window (star reduction, colour balance, crop)
   - Plate solving via nova.astrometry.net with WCS embedding
   - Mosaic stitching from multiple plate-solved panels
   - Blink comparator for visual frame inspection
   - Session save/load
-  - TIFF and PNG export
+  - FITS, TIFF, JPEG, and PNG export
 
 
 ================================================================================
@@ -124,7 +133,8 @@ Supported input file formats:
 
 Export formats:
   - FITS  (linear, full floating-point precision — preferred for further work)
-  - TIFF  (auto-stretched 16-bit, for sharing and further processing)
+  - TIFF  (auto-stretched 8-bit, for sharing and further processing)
+  - JPEG  (auto-stretched 8-bit, compressed — for web sharing and posting)
   - PNG   (auto-stretched 8-bit, for quick previews and sharing)
 
 The app does not currently support raw camera formats (.CR2, .NEF, .ARW, etc.)
@@ -195,7 +205,7 @@ Page 3 — Plate Solving (Optional)
   - Focal length (mm) — your telescope's focal length
   - Pixel size (µm)   — your camera's pixel size in micrometres
   You can skip this page and set it up later in the Plate Solve tab. See
-  Sections 10.4 and 10.5 for how to find these values.
+  Sections 11.4 and 11.5 for how to find these values.
 
 Page 4 — You're Ready!
   A quick-start guide showing you the five steps to your first stack.
@@ -605,7 +615,7 @@ size, objects detected) is also displayed in the progress log.
 If no API key is entered, auto plate solve is skipped and the pipeline
 completes with a note in the log.
 
-See Section 10 for full details on plate solving.
+See Section 11 for full details on plate solving.
 
 
 ================================================================================
@@ -716,10 +726,196 @@ with a tail extending toward brighter values.
 
 
 ================================================================================
-10.  PLATE SOLVE TAB
+10.  POST-PROCESSING WINDOW
 ================================================================================
 
-── 10.1  WHAT IS PLATE SOLVING? ────────────────────────────────────────────────
+The Post-Processing Window opens any stacked image for interactive fine-tuning.
+It is separate from the pipeline processing options in the Settings panel —
+use it after stacking to apply finishing touches, then compare directly with
+the original before saving.
+
+To open: after a stack completes, click  File > Post-Process...  or use the
+post-process button that appears in the preview toolbar. The window works on
+the currently displayed image.
+
+The window is non-destructive — your original stacked file is never modified.
+Every Apply starts fresh from the unprocessed data, so you can freely adjust
+settings and click Apply as many times as you like.
+
+── 10.1  HOW THE PREVIEW WORKS ────────────────────────────────────────────────
+
+The window has a large image preview on the left (with the same Stretch and
+Zoom controls as the main Preview panel) and a controls panel on the right.
+
+When you click Apply, the display is locked to the same stretch scale that
+was computed from the original unprocessed image. This "locked stretch" keeps
+before and after views on the same brightness axis — without it, the
+auto-stretch would compensate for reduced star brightness and make effects
+like star reduction appear invisible.
+
+Use the "Show Original" toggle below the preview to switch between the
+processed result and the original at any time. Both views use the locked
+stretch for a fair comparison.
+
+── 10.2  CLEANUP ───────────────────────────────────────────────────────────────
+
+Auto-crop edges
+  Trims dark alignment borders from the stacked result. Same operation as
+  Auto-Crop in the pipeline (Section 7.4), applied interactively here. Safe
+  to enable if Auto-Crop was not used during the pipeline run.
+
+Remove gradient
+  Fits and subtracts a smooth sky background to correct light pollution,
+  moonlight, or vignetting. Same algorithm as Section 7.2 (Remove Light
+  Pollution Gradient), applied to the stack interactively.
+
+── 10.3  ENHANCE ───────────────────────────────────────────────────────────────
+
+Sharpen
+  PSF-informed sharpening. See Section 7.6 for full details.
+  Presets: Light / Medium / Strong.
+
+Denoise
+  Non-Local Means denoising. See Section 7.5 for full details.
+  Presets: Light / Medium / Strong.
+
+── 10.4  STAR BRIGHTNESS REDUCTION ────────────────────────────────────────────
+
+Reduces the brightness of stars in the stacked image, making faint nebulosity
+and background structure more visible relative to dominant stars. Useful when
+bright stars overpower a widefield target, or when you want to reveal faint
+emission structure near saturated stars.
+
+How it works:
+  1. A high-pass filter isolates point sources (stars) from the soft
+     background (nebulosity, gradients). Stars are sharp and appear in the
+     high-pass layer; nebulosity is blurry and is filtered out.
+  2. Peak detection finds individual star centres across the full image.
+  3. A soft Gaussian mask is painted over each detected star, sized to cover
+     the star's disc and outer halo.
+  4. For each colour channel, the stellar signal above the local background
+     is estimated and partially subtracted, scaled by the Strength setting.
+
+Background estimation uses two scales:
+  - Near (25-pixel Gaussian) — used away from bright stars.
+  - Far (100-pixel Gaussian) — used inside star masks. The near estimate is
+    contaminated by the star's own halo flux; the far estimate averages a
+    much wider area, giving a more accurate sky level and allowing reduction
+    to reach cleanly into the outer halo without leaving a glowing ring.
+
+The sky, nebulosity, and dust structure beneath stars are preserved. Stars
+embedded deep inside bright nebula cores may be only partially reduced (the
+background estimator is elevated by surrounding emission), but the result
+is always physically plausible — no dark holes or halos are created.
+
+No AI or model files are required. The algorithm runs entirely on the CPU
+using classical image processing (scipy.ndimage, scikit-image).
+
+How to use:
+  1. Tick "Reduce stars" to enable.
+  2. Set Strength: drag the slider or type directly into the spinbox
+     (0 % = no change, 100 % = maximum reduction). Start at 50–70 %.
+  3. Click Apply and use "Show Original" to compare the result.
+  4. Adjust Strength and Apply again if needed.
+
+── 10.5  COLOUR BALANCE ────────────────────────────────────────────────────────
+
+Adjusts the relative brightness of the red, green, and blue channels. Use
+this to correct a colour cast from:
+  - Light pollution (orange/green tint from city skies)
+  - Atmospheric airglow (reddish tint from oxygen and sodium emission)
+  - Bayer sensor channel imbalance
+  - Narrowband filter leakage
+
+Auto (recommended)
+  Samples the sky background from the image corners and automatically
+  neutralises any colour cast. Tick "Enable colour balance" and leave
+  "Auto (recommended)" checked for a one-click correction.
+
+Manual adjustment
+  Uncheck "Auto (recommended)" to access the R, G, and B sliders.
+  Each channel has a multiplier from 0.50× to 2.00×:
+  - 1.00× = no change (default).
+  - Above 1.00× = brighter (boost the channel).
+  - Below 1.00× = dimmer (reduce the channel).
+
+  Each slider has a paired numeric spinbox — type a value directly (e.g.
+  1.35) without having to drag the slider.
+
+  Tip: The preview uses luminance-linked auto-stretch, which derives its
+  scale from all three channels together. Colour adjustments are always
+  clearly visible — a change to Red is not silently cancelled by the
+  stretch renormalising only the Red channel.
+
+Colour balance has no effect on monochrome (single-channel) images.
+
+── 10.6  CROP TOOL ─────────────────────────────────────────────────────────────
+
+Selects a rectangular region of the image to keep, discarding everything
+outside it. Useful for:
+  - Removing edge artifacts or alignment borders not caught by Auto-crop
+  - Tightly framing a specific target within a wide-field stack
+  - Excluding a very bright star or lens artifact near the frame edge
+
+How to use:
+  1. Click "✂ Crop" in the toggle bar below the preview image.
+     The cursor changes to a crosshair.
+  2. Click and drag on the preview to draw a selection rectangle.
+     An orange rubber-band rectangle shows the crop region as you drag.
+  3. Release the mouse. The crop region is confirmed automatically. The
+     dimensions and position appear in the toggle bar
+     (e.g. "Crop: 3840×2160 px at 120,80").
+  4. Click Apply. The crop is applied to the original unprocessed image,
+     not to the already-processed result — you can combine crop with any
+     other option in the same Apply pass.
+
+To remove the crop selection:
+  Click "✕ Clear" (appears once a crop is set), or click Reset to Original.
+
+Notes:
+  - Crop mode exits automatically after you release the mouse.
+  - A minimum selection of 10×10 pixels is required to confirm a crop.
+  - The crop selection is remembered across Apply passes until cleared.
+
+── 10.7  APPLYING CHANGES AND SAVING ───────────────────────────────────────────
+
+▶ Apply
+  Runs all ticked options on the original stacked image and updates the
+  preview. Processing runs on a background thread — the Apply button is
+  greyed out until the run completes. A status message at the bottom of the
+  controls panel shows progress.
+
+  Each Apply starts from the original unprocessed data (not from the previous
+  Apply result), so settings are fully independent of each other.
+
+Reset to Original
+  Returns the preview to the unprocessed original. All control settings are
+  preserved so you can adjust and Apply again.
+
+Save FITS...
+  Saves the current result as a 32-bit floating-point FITS file — the best
+  format for further processing in PixInsight, Siril, or any other tool.
+  If no processing has been applied, the original stack is saved.
+
+Save TIFF...  /  Save JPEG...  /  Save PNG...
+  Saves a stretched, display-ready version of the current result. Each format
+  applies a fresh auto-stretch at save time, so the saved image is correctly
+  exposed regardless of the current preview stretch mode.
+
+  TIFF  — 8-bit stretched. Good for Photoshop, GIMP, or Lightroom.
+  JPEG  — 8-bit compressed. Best for web sharing and online posting.
+  PNG   — 8-bit lossless. Good for sharing without compression artefacts.
+
+Close
+  Closes the window. Your original stacked FITS file on disk is never
+  affected. Any processed result not explicitly saved is discarded.
+
+
+================================================================================
+11.  PLATE SOLVE TAB
+================================================================================
+
+── 11.1  WHAT IS PLATE SOLVING? ────────────────────────────────────────────────
 
 Plate solving is the process of identifying the exact position of an
 astrophotograph in the sky by matching the pattern of stars in the image
@@ -739,7 +935,7 @@ colour calibration (SPCC in PixInsight requires WCS).
 Haysey's Astrostacker uses the free nova.astrometry.net service for plate
 solving, which means an internet connection is required for this feature.
 
-── 10.2  GETTING A FREE API KEY ────────────────────────────────────────────────
+── 11.2  GETTING A FREE API KEY ────────────────────────────────────────────────
 
 An API key is strongly recommended. Without it, solving goes into an
 anonymous queue which is much slower (can be 30+ minutes).
@@ -754,7 +950,7 @@ anonymous queue which is much slower (can be 30+ minutes).
 Your API key is saved automatically when you type it and persists across
 sessions. You only need to enter it once.
 
-── 10.3  SETTING SCALE HINTS (STRONGLY RECOMMENDED) ───────────────────────────
+── 11.3  SETTING SCALE HINTS (STRONGLY RECOMMENDED) ───────────────────────────
 
 Scale hints tell nova.astrometry.net the approximate pixel scale of your
 image (in arcseconds per pixel). Without them, the solver must search through
@@ -780,7 +976,7 @@ per telescope/camera combination.
 You can also type scale bounds manually in the Lower bound and Upper bound
 fields in Arcsec/pixel, Arcmin (field width), or Degrees (field width) units.
 
-── 10.4  FINDING YOUR FOCAL LENGTH ────────────────────────────────────────────
+── 11.4  FINDING YOUR FOCAL LENGTH ────────────────────────────────────────────
 
 Your telescope focal length is usually printed on:
   - The focuser drawtube or the OTA tube itself  (e.g. "f=500mm")
@@ -799,7 +995,7 @@ If you use a focal reducer or Barlow lens, you must account for it:
   Focal reducer ×0.7 at 1000mm scope  →  1000 × 0.7 = 700 mm effective
   Barlow ×2 at 600mm scope            →  600 × 2 = 1200 mm effective
 
-── 10.5  FINDING YOUR CAMERA PIXEL SIZE ────────────────────────────────────────
+── 11.5  FINDING YOUR CAMERA PIXEL SIZE ────────────────────────────────────────
 
 Pixel size is a physical property of your camera sensor. It is constant for
 a given camera model and does not change with settings. It is measured in
@@ -829,14 +1025,14 @@ Note: If your camera supports hardware binning (2×2, etc.) and you capture
 in binned mode, multiply the pixel size accordingly:
   e.g. ZWO ASI294MC Pro at 2×2 binning: 4.63 × 2 = 9.26 µm effective
 
-── 10.6  MANUAL PLATE SOLVING ──────────────────────────────────────────────────
+── 11.6  MANUAL PLATE SOLVING ──────────────────────────────────────────────────
 
 To manually plate solve any image:
 
   1. Select the image using the Browse... button in the Image section of the
      Plate Solve tab. (Alternatively, click a file in the Stacking tab —
      it is automatically set as the plate solve target.)
-  2. Ensure your API key is entered and scale hints are set (see 10.3).
+  2. Ensure your API key is entered and scale hints are set (see 11.3).
   3. Click the "Solve" button.
 
 The progress log below the button shows each step:
@@ -854,7 +1050,7 @@ image coordinates before being saved.
 While a solve is running, the Solve button becomes a red "Cancel" button.
 Click it to abort.
 
-── 10.7  THE SOLVE RESULT WINDOW ───────────────────────────────────────────────
+── 11.7  THE SOLVE RESULT WINDOW ───────────────────────────────────────────────
 
 After a successful solve, a result window opens automatically showing:
   - The image with named objects (NGC/IC catalogues, named stars) circled
@@ -864,7 +1060,7 @@ After a successful solve, a result window opens automatically showing:
 
 If you close the result window, you can regenerate the result by solving again.
 
-── 10.8  EMBEDDING WCS INTO ANY FITS FILE ─────────────────────────────────────
+── 11.8  EMBEDDING WCS INTO ANY FITS FILE ─────────────────────────────────────
 
 After a successful solve, the "Write WCS to FITS..." button becomes active.
 Click it to choose any FITS file and embed the astrometry WCS keywords into it.
@@ -884,14 +1080,14 @@ The following WCS keywords are embedded:
   PLTSOLVD         — flag indicating a plate solve was performed
   FLDWIDTH, FLDHGHT — field size in arcminutes
 
-── 10.9  AUTO PLATE SOLVE AFTER STACKING ───────────────────────────────────────
+── 11.9  AUTO PLATE SOLVE AFTER STACKING ───────────────────────────────────────
 
 See Section 7.8. WCS data from the auto-solve is embedded into the stacked
 FITS file automatically. You do not need to click "Write WCS to FITS..." again.
 
 
 ================================================================================
-11.  MOSAIC TAB
+12.  MOSAIC TAB
 ================================================================================
 
 The Mosaic tab allows you to stitch multiple separately stacked and
@@ -920,10 +1116,10 @@ Tips:
 
 
 ================================================================================
-12.  TOOLS MENU
+13.  TOOLS MENU
 ================================================================================
 
-── 12.1  BLINK COMPARATOR ──────────────────────────────────────────────────────
+── 13.1  BLINK COMPARATOR ──────────────────────────────────────────────────────
 
   Tools > Blink Comparator...
 
@@ -943,7 +1139,7 @@ brightness regardless of their actual pixel values.
 
 Requires at least 2 light frames to be loaded.
 
-── 12.2  VIEW FITS HEADER ──────────────────────────────────────────────────────
+── 13.2  VIEW FITS HEADER ──────────────────────────────────────────────────────
 
   Tools > View FITS Header...
 
@@ -955,7 +1151,7 @@ Useful for checking exposure metadata (EXPTIME, DATE-OBS, TELESCOP, etc.),
 verifying that WCS keywords were embedded correctly, and inspecting camera
 settings recorded during capture.
 
-── 12.3  SETUP WIZARD ──────────────────────────────────────────────────────────
+── 13.3  SETUP WIZARD ──────────────────────────────────────────────────────────
 
   Tools > Setup Wizard...
 
@@ -963,7 +1159,7 @@ Re-opens the first-run Setup Wizard at any time. Useful for updating your
 camera type, API key, focal length, or pixel size. Any values you change are
 saved when you click through to the end of the wizard.
 
-── 12.4  ABOUT ─────────────────────────────────────────────────────────────────
+── 13.4  ABOUT ─────────────────────────────────────────────────────────────────
 
   Tools > About Haysey's Astrostacker...
 
@@ -973,10 +1169,10 @@ guide included with the app.
 
 
 ================================================================================
-13.  FILE MENU
+14.  FILE MENU
 ================================================================================
 
-── 13.1  SAVE SESSION / LOAD SESSION ───────────────────────────────────────────
+── 14.1  SAVE SESSION / LOAD SESSION ───────────────────────────────────────────
 
   File > Save Session...
   File > Load Session...
@@ -999,7 +1195,7 @@ Note: Session files store file paths, not the image data. If you move or
 delete the original files, the paths in the session will no longer be valid.
 Files that no longer exist at the stored path are silently skipped when loading.
 
-── 13.2  EXPORT AS TIFF / PNG ──────────────────────────────────────────────────
+── 14.2  EXPORT AS TIFF / PNG ──────────────────────────────────────────────────
 
   File > Export as TIFF...
   File > Export as PNG...
@@ -1021,10 +1217,10 @@ the full linear, unprocessed data.
 
 
 ================================================================================
-14.  STACKING STRATEGY GUIDE
+15.  STACKING STRATEGY GUIDE
 ================================================================================
 
-── 14.1  CHOOSING THE RIGHT STACKING METHOD ────────────────────────────────────
+── 15.1  CHOOSING THE RIGHT STACKING METHOD ────────────────────────────────────
 
 Quick reference:
 
@@ -1042,7 +1238,7 @@ If satellite trails or planes are a concern, Sigma Clipping and Percentile
 Clipping are both very effective at removing them. Median also works but
 leaves faint ghost trails at low frame counts.
 
-── 14.2  HOW MANY FRAMES DO I NEED? ────────────────────────────────────────────
+── 15.2  HOW MANY FRAMES DO I NEED? ────────────────────────────────────────────
 
 Stacking SNR improves with the square root of the number of frames. To halve
 your noise, you need 4× as many frames.
@@ -1063,7 +1259,7 @@ Practical minimums:
   - Auto-reject: requires at least 3 frames.
   - Drizzle: benefits from 15+ frames.
 
-── 14.3  CALIBRATION FRAME GUIDE ───────────────────────────────────────────────
+── 15.3  CALIBRATION FRAME GUIDE ───────────────────────────────────────────────
 
   Frame type    Minimum  Recommended  Purpose
   ──────────────────────────────────────────────────────────────────────────
@@ -1081,7 +1277,7 @@ Flats are always beneficial if your images show vignetting (darkening toward
 corners) or dust donuts. They require matching the focus position of your
 lights exactly.
 
-── 14.4  COLOUR VS. MONO CAMERAS ───────────────────────────────────────────────
+── 15.4  COLOUR VS. MONO CAMERAS ───────────────────────────────────────────────
 
 One-shot colour cameras (OSC / Bayer matrix cameras) have a colour filter array
 bonded to the sensor. Each photosite records only one of Red, Green, or Blue
@@ -1099,7 +1295,7 @@ or narrowband Ha/OIII/SII for emission nebulae).
 For anyone just starting out, a one-shot colour DSLR or astronomy
 camera is the best choice. Set the app to Colour (Bayer) mode.
 
-── 14.5  DRIZZLE — WHEN TO USE IT ──────────────────────────────────────────────
+── 15.5  DRIZZLE — WHEN TO USE IT ──────────────────────────────────────────────
 
 Drizzle is most effective when:
   1. You are imaging a high-detail target (galaxies, planetary nebulae, globular
@@ -1123,7 +1319,7 @@ Drizzle is NOT recommended when:
 
 
 ================================================================================
-15.  TROUBLESHOOTING
+16.  TROUBLESHOOTING
 ================================================================================
 
 PROBLEM: The app doesn't start or crashes immediately.
@@ -1150,7 +1346,7 @@ PROBLEM: The stacked image has black triangle borders.
 SOLUTION: Enable Auto-Crop Stacking Edges to remove them automatically.
 
 PROBLEM: Plate solve fails with "no solution found".
-SOLUTION: - Check that your scale hints are set and correct (see 10.3).
+SOLUTION: - Check that your scale hints are set and correct (see 11.3).
           - Ensure your image actually contains detectable stars.
           - If using Drizzle, the app automatically halves the scale hints —
             if you are solving a drizzled image manually via the Plate Solve
@@ -1160,12 +1356,12 @@ SOLUTION: - Check that your scale hints are set and correct (see 10.3).
           - Check that nova.astrometry.net is accessible from your network.
 
 PROBLEM: Plate solving takes more than 15 minutes.
-SOLUTION: Set scale hints (see 10.3). Solving without hints is dramatically
+SOLUTION: Set scale hints (see 11.3). Solving without hints is dramatically
           slower. Also check your API key is entered — anonymous users wait in
           a longer queue.
 
 PROBLEM: "Auto plate solve skipped — no API key set" message in the log.
-SOLUTION: Enter your API key in the Plate Solve tab (see 10.2). The key is
+SOLUTION: Enter your API key in the Plate Solve tab (see 11.2). The key is
           saved across sessions — you only need to enter it once.
 
 PROBLEM: The pipeline fails with an alignment error.
@@ -1195,7 +1391,7 @@ SOLUTION: Each panel must have WCS data embedded. Plate-solve every panel
 
 
 ================================================================================
-16.  GLOSSARY
+17.  GLOSSARY
 ================================================================================
 
 Arcsecond / Arcminute / Degree
@@ -1305,5 +1501,5 @@ XISF (Extensible Image Serialisation Format)
 ================================================================================
        END OF USER MANUAL
        Haysey's Astrostacker  v1.0.0  Beta Bronze
-       https://github.com/haysey/astrostacker
+       17 sections  ·  https://github.com/haysey/astrostacker
 ================================================================================
