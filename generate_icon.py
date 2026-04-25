@@ -187,7 +187,7 @@ def main():
     lines_layer = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     lines_draw = ImageDraw.Draw(lines_layer)
 
-    line_color = (205, 140, 60, 40)  # bronze constellation lines
+    line_color = (255, 200, 0, 45)  # gold constellation lines
     lines_draw.line([gacrux, acrux], fill=line_color, width=1)
     lines_draw.line([mimosa, delta], fill=line_color, width=1)
     # Pointer line
@@ -198,16 +198,16 @@ def main():
     # Draw the stars with glow
     constellation_layer = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
 
-    # Southern Cross stars - bright blue-white
-    star_color = (200, 220, 255)
+    # Southern Cross stars - bright gold
+    star_color = (255, 215, 30)
     draw_star_glow(constellation_layer, *acrux, 28, star_color)   # Alpha - brightest
     draw_star_glow(constellation_layer, *mimosa, 24, star_color)  # Beta
-    draw_star_glow(constellation_layer, *gacrux, 22, (255, 200, 150))  # Gamma - orange-ish
+    draw_star_glow(constellation_layer, *gacrux, 22, star_color)  # Gamma
     draw_star_glow(constellation_layer, *delta, 18, star_color)   # Delta
     draw_star_glow(constellation_layer, *epsilon, 12, star_color) # Epsilon - dimmest
 
-    # Pointer stars - warm white
-    pointer_color = (255, 240, 200)
+    # Pointer stars - bright gold (matching the Cross)
+    pointer_color = (255, 215, 30)
     draw_star_glow(constellation_layer, *alpha_cen, 26, pointer_color)  # Alpha Centauri
     draw_star_glow(constellation_layer, *beta_cen, 20, pointer_color)   # Beta Centauri
 

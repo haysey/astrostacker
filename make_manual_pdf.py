@@ -217,11 +217,11 @@ def draw_cover(canvas, doc):
     ]
     ax, ay = W - 55 * mm, 38 * mm
     star_sizes = [2.2, 1.8, 1.6, 1.4, 0.9]
-    canvas.setFillColor(colors.Color(0.9, 0.85, 0.6, alpha=0.65))
+    canvas.setFillColor(colors.Color(1.0, 0.843, 0.118, alpha=0.90))
     for (dx, dy), sz in zip(sc, star_sizes):
         canvas.circle(ax + dx, ay + dy, sz, fill=1, stroke=0)
     # draw cross lines
-    canvas.setStrokeColor(colors.Color(0.9, 0.85, 0.6, alpha=0.18))
+    canvas.setStrokeColor(colors.Color(1.0, 0.843, 0.118, alpha=0.25))
     canvas.setLineWidth(0.5)
     pts = [(ax + dx, ay + dy) for dx, dy in sc[:4]]
     canvas.line(pts[0][0], pts[0][1], pts[2][0], pts[2][1])
