@@ -27,7 +27,7 @@ from astrostacker.utils.deconvolution import sharpen_image
 from astrostacker.utils.denoise import denoise_image
 from astrostacker.utils.frame_quality import score_frames
 from astrostacker.utils.gradient import remove_gradient
-from astrostacker.utils.parallel import optimal_workers, parallel_load_images
+from astrostacker.utils.parallel import optimal_workers
 from astrostacker.utils.star_reduction import reduce_stars
 
 
@@ -191,24 +191,34 @@ class Pipeline:
             self._report(f"Master flat saved → {flat_path}")
         self._check_cancel()
 
-        # Stage 2: Load and calibrate light frames
-        #   - Parallel I/O for loading
-        #   - Pre-computed flat divisor (computed once, reused per frame)
-        #   - Parallel calibration across performance cores
-        self._report("Loading light frames...")
-        lights = parallel_load_images(self.config.light_paths, load_image)
-        self._check_cancel()
+        # Stage 2: Load and calibrate light frames sequentially.
+        #
+        # WHY sequential rather than parallel load+calibrate:
+        #   Parallel loading stores ALL raw frames in RAM before calibration
+        #   begins, then parallel calibration creates calibrated copies on top.
+        #   Peak RAM = n_raw_frames + n_calibrated_frames + worker_temporaries
+        #            ≈ 2 × n × frame_size.
+        #   For a 594-frame, 45 MiB/frame stack that is ~53 GB — impossible on
+        #   most machines even before alignment and stacking begin.
+        #
+        #   Sequential load-calibrate-free keeps peak at 1 raw frame + the
+        #   growing calibrated list:  ≈ (n + 1) × frame_size — roughly half
+        #   the previous peak, matching the approach used by PixInsight and
+        #   other professional tools.
+        n_frames = len(self.config.light_paths)
+        self._report(f"Loading light frames (1/{n_frames})...")
 
-        # Pre-compute the safe flat divisor once (avoids repeat work per frame).
-        # Pass the light frame shape so a mismatched flat is resized once,
-        # not on every frame.
-        light_shape = lights[0].shape
+        # Load the first frame to determine shape; use it to prepare the
+        # flat divisor and optionally resize the master dark — both done
+        # once up-front so calibrate_light never needs to do it per-frame.
+        _probe     = load_image(self.config.light_paths[0])
+        light_shape = _probe.shape
+
         flat_div = (
             prepare_flat_divisor(master_flat, target_shape=light_shape)
             if master_flat is not None else None
         )
 
-        # Also resize master dark once if dimensions differ
         if master_dark is not None and master_dark.shape[:2] != light_shape[:2]:
             from astrostacker.calibration.calibrate import _match_shape
             self._report(
@@ -217,21 +227,22 @@ class Pipeline:
             )
             master_dark = _match_shape(master_dark, light_shape, "dark")
 
-        workers = optimal_workers(io_bound=False)
-        n_frames = len(lights)
         dark_opt_note = " (with dark optimisation)" if master_dark is not None else ""
-        self._report(f"Calibrating {n_frames} frames across {workers} cores{dark_opt_note}...")
+        self._report(f"Calibrating {n_frames} frames{dark_opt_note}...")
 
-        def _calibrate_one(light):
-            return calibrate_light(light, master_dark, flat_divisor=flat_div)
-
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            calibrated = list(pool.map(_calibrate_one, lights))
-        self._report_progress(n_frames, n_frames, "Calibrating")
-        self._check_cancel()
-
-        # Free raw lights to reduce peak memory
-        del lights
+        # Load and calibrate one frame at a time, releasing the raw array
+        # before loading the next so only one unprocessed frame occupies RAM.
+        calibrated: list[np.ndarray] = []
+        for i, path in enumerate(self.config.light_paths):
+            if i == 0:
+                light = _probe
+                del _probe              # drop extra reference; `light` still holds it
+            else:
+                light = load_image(path)
+            calibrated.append(calibrate_light(light, master_dark, flat_divisor=flat_div))
+            del light                   # release raw frame before next iteration
+            self._report_progress(i + 1, n_frames, "Calibrating")
+            self._check_cancel()
 
         # Stage 2b: Debayer colour camera frames
         # In-place sequential conversion: each mono frame is replaced by
