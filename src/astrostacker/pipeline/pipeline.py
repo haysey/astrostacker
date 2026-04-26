@@ -9,7 +9,7 @@ from typing import Callable
 
 import numpy as np
 
-from concurrent.futures import ThreadPoolExecutor
+import tempfile as _tempmod
 
 from astrostacker.alignment.align import (
     _normalise_for_alignment,
@@ -27,6 +27,7 @@ from astrostacker.utils.deconvolution import sharpen_image
 from astrostacker.utils.denoise import denoise_image
 from astrostacker.utils.frame_quality import score_frames
 from astrostacker.utils.gradient import remove_gradient
+from astrostacker.utils.frame_buffer import _FrameBuffer
 from astrostacker.utils.parallel import optimal_workers
 from astrostacker.utils.star_reduction import reduce_stars
 
@@ -191,27 +192,26 @@ class Pipeline:
             self._report(f"Master flat saved → {flat_path}")
         self._check_cancel()
 
-        # Stage 2: Load and calibrate light frames sequentially.
+        # Stage 2: Calibrate, debayer, align, and stack via a disk-backed buffer.
         #
-        # WHY sequential rather than parallel load+calibrate:
-        #   Parallel loading stores ALL raw frames in RAM before calibration
-        #   begins, then parallel calibration creates calibrated copies on top.
-        #   Peak RAM = n_raw_frames + n_calibrated_frames + worker_temporaries
-        #            ≈ 2 × n × frame_size.
-        #   For a 594-frame, 45 MiB/frame stack that is ~53 GB — impossible on
-        #   most machines even before alignment and stacking begin.
+        # WHY numpy.memmap rather than Python lists:
+        #   Holding all calibrated frames in RAM simultaneously is not feasible
+        #   for large stacks.  A 594-frame colour stack at 140 MB/frame = 83 GB.
+        #   numpy.memmap writes frames to a temp file and lets the OS page data
+        #   in/out of RAM on demand — only the actively-needed pages are in memory
+        #   at any moment, rather than the full dataset.  Peak RAM drops from
+        #   "entire dataset" to "a handful of frames" (calibration: 1 frame;
+        #   alignment: reference + source + scratch ≈ 3 frames; stacking: one
+        #   adaptive-sized strip).  This is how PixInsight handles large stacks.
         #
-        #   Sequential load-calibrate-free keeps peak at 1 raw frame + the
-        #   growing calibrated list:  ≈ (n + 1) × frame_size — roughly half
-        #   the previous peak, matching the approach used by PixInsight and
-        #   other professional tools.
+        #   The temp file is deleted automatically when stacking completes or if
+        #   any exception (including cancellation) propagates out of the with block.
         n_frames = len(self.config.light_paths)
         self._report(f"Loading light frames (1/{n_frames})...")
 
-        # Load the first frame to determine shape; use it to prepare the
-        # flat divisor and optionally resize the master dark — both done
-        # once up-front so calibrate_light never needs to do it per-frame.
-        _probe     = load_image(self.config.light_paths[0])
+        # Probe the first frame to learn its raw shape, prepare the flat
+        # divisor, and optionally resize the master dark — all once up-front.
+        _probe = load_image(self.config.light_paths[0])
         light_shape = _probe.shape
 
         flat_div = (
@@ -227,205 +227,230 @@ class Pipeline:
             )
             master_dark = _match_shape(master_dark, light_shape, "dark")
 
-        dark_opt_note = " (with dark optimisation)" if master_dark is not None else ""
-        self._report(f"Calibrating {n_frames} frames{dark_opt_note}...")
-
-        # Load and calibrate one frame at a time, releasing the raw array
-        # before loading the next so only one unprocessed frame occupies RAM.
-        calibrated: list[np.ndarray] = []
-        for i, path in enumerate(self.config.light_paths):
-            if i == 0:
-                light = _probe
-                del _probe              # drop extra reference; `light` still holds it
-            else:
-                light = load_image(path)
-            calibrated.append(calibrate_light(light, master_dark, flat_divisor=flat_div))
-            del light                   # release raw frame before next iteration
-            self._report_progress(i + 1, n_frames, "Calibrating")
-            self._check_cancel()
-
-        # Stage 2b: Debayer colour camera frames
-        # In-place sequential conversion: each mono frame is replaced by
-        # its RGB version one at a time.  The old (small) mono array is
-        # freed as soon as its slot is overwritten, so peak extra RAM is
-        # just one new RGB frame (~140 MB) rather than an entire second
-        # RGB list (~5 GB extra spike with the previous parallel approach).
-        if self.config.camera_type == CAMERA_COLOUR:
-            self._report(
-                f"Debayering {n_frames} frames ({self.config.bayer_pattern})..."
-            )
-            pattern = self.config.bayer_pattern
-            for i in range(n_frames):
-                if calibrated[i].ndim == 2:
-                    calibrated[i] = debayer(calibrated[i], pattern)
-                self._report_progress(i + 1, n_frames, "Debayering")
-            self._check_cancel()
-            self._report(f"Debayer complete — frames are now RGB {calibrated[0].shape}")
+        # Calibrate and optionally debayer the probe frame now so we know
+        # the final frame shape before allocating the buffer.
+        is_colour = self.config.camera_type == CAMERA_COLOUR
+        _probe_cal = calibrate_light(_probe, master_dark, flat_divisor=flat_div)
+        del _probe
+        if is_colour and _probe_cal.ndim == 2:
+            _probe_final = debayer(_probe_cal, self.config.bayer_pattern)
+            final_frame_shape = _probe_final.shape   # (H, W, 3)
+            del _probe_final
         else:
-            self._report("Camera set to Mono — skipping debayer")
+            final_frame_shape = _probe_cal.shape     # (H, W) mono
 
-        # Stage 2b: Auto frame rejection (PSF-based)
-        self.rejected_paths = []
-        if self.config.auto_reject and len(calibrated) >= 3:
-            self._report("Scoring frame quality (PSF fitting)...")
-            scores = score_frames(calibrated, self.config.rejection_sigma)
-            kept = []
-            for s in scores:
-                label = (
-                    f"  Frame {s.index}: FWHM={s.fwhm:.2f}px  "
-                    f"Ecc={s.eccentricity:.2f}  Round={s.roundness:.2f}  "
-                    f"Stars={s.n_stars}"
-                )
-                if s.keep:
-                    kept.append(calibrated[s.index])
-                    self._report(f"{label} — kept")
-                else:
-                    self.rejected_paths.append(self.config.light_paths[s.index])
-                    self._report(f"{label} — REJECTED")
-            if len(kept) >= 2:
-                self._report(
-                    f"Frame rejection: kept {len(kept)}/{len(calibrated)}, "
-                    f"rejected {len(self.rejected_paths)}"
-                )
-                calibrated = kept
-            else:
-                self._report("Too few frames would remain — keeping all")
-                self.rejected_paths = []
-            self._check_cancel()
-
-        self.accepted_count = len(calibrated)
-
-        # Stage 3: Align calibrated frames
-        # Sequential free-as-you-go alignment: each input frame's slot in
-        # the calibrated list is set to None immediately after it has been
-        # aligned, allowing Python's reference counting to free that array
-        # before the next one is processed.
-        #
-        # Memory profile:
-        #   Parallel (old): input list (5 GB) + full output list (5 GB)
-        #                   = 10 GB peak at completion
-        #   Sequential (new): at any point, (N - i) input frames +
-        #                     i output frames = always N frames = ~5 GB
-        #
-        # The trade-off is losing parallel alignment across CPU cores.
-        # On memory-constrained machines (VMs, laptops) correctness
-        # matters more than the ~2-4× parallel speedup.
-        self._report("Aligning frames...")
-        n_calib = len(calibrated)
-        ref_idx = min(self.config.reference_frame, n_calib - 1)
-        reference = calibrated[ref_idx]
-        is_color = reference.ndim == 3
-
-        if is_color:
-            ref_lum = _normalise_for_alignment(np.mean(reference, axis=2))
-            ref_channels_norm = [
-                _normalise_for_alignment(reference[:, :, c])
-                for c in range(reference.shape[2])
-            ]
-        else:
-            ref_lum = _normalise_for_alignment(reference)
-            ref_channels_norm = []
-
-        aligned: list[np.ndarray] = []
-        align_failed = 0
-
-        for i in range(n_calib):
-            frame = calibrated[i]
-            calibrated[i] = None  # release list slot; GC frees the array
-                                  # once `frame` goes out of scope below
-
-            if i == ref_idx:
-                aligned.append(frame)
-                self._report(f"  Frame {i}: reference (kept as-is)")
-            else:
-                args = (i, frame, ref_lum, ref_channels_norm, reference, is_color)
-                _, aligned_frame, error_msg = _align_single_frame(args)
-                del frame  # free input immediately after alignment attempt
-                if aligned_frame is not None:
-                    aligned.append(aligned_frame)
-                else:
-                    align_failed += 1
-                    self._report(
-                        f"  Frame {i} alignment failed — skipping: "
-                        f"{error_msg[:120]}"
-                    )
-
-            self._report_progress(i + 1, n_calib, "Aligning")
-            self._check_cancel()
-
-        # Free the calibrated list (all entries are now None) and
-        # the alignment scratch arrays.  `reference` is still held by
-        # aligned[ref_idx], so del only removes the extra reference here.
-        del calibrated, reference, ref_lum, ref_channels_norm
-
+        # Report expected disk usage so users are not surprised by a large
+        # temp file appearing on their system drive during a long stack.
+        _tmpdir = _tempmod.gettempdir()
+        _frame_mb = int(np.prod(final_frame_shape)) * 4 / 1024 / 1024
+        _total_mb = n_frames * _frame_mb
         self._report(
-            f"Alignment: {len(aligned)}/{n_calib} succeeded, "
-            f"{align_failed} failed"
+            f"Temp buffer: {_total_mb:,.0f} MB in {_tmpdir} "
+            f"({n_frames} × {_frame_mb:.0f} MB/frame — deleted on completion)"
         )
-        self._check_cancel()
 
-        if len(aligned) < 2:
-            raise ValueError(
-                f"Only {len(aligned)} frame(s) aligned successfully. "
-                "Need at least 2 to stack."
-            )
+        dark_opt_note = " (with dark optimisation)" if master_dark is not None else ""
+        self._report(
+            f"Calibrating{' and debayering' if is_colour else ''} "
+            f"{n_frames} frames{dark_opt_note}..."
+        )
 
-        # Stage 4: Stack
-        if self.config.drizzle:
-            self._report(
-                f"Drizzle stacking {len(aligned)} frames "
-                f"({self.config.drizzle_scale}x upscale)..."
-            )
-            result = drizzle_stack(
-                aligned, scale=self.config.drizzle_scale
-            )
-        else:
-            self._report(f"Stacking {len(aligned)} frames ({self.config.stacking_method})...")
+        with _FrameBuffer(n_frames, final_frame_shape) as frame_buf:
 
-            # Build kwargs relevant to the chosen stacking method.
-            # stacker.py filters out any that the method doesn't accept.
-            kwargs = {
-                "sigma_low": self.config.sigma_low,
-                "sigma_high": self.config.sigma_high,
-                "pct_low": self.config.percentile_low,
-                "pct_high": self.config.percentile_high,
-            }
+            # ── Calibrate (+ debayer for colour) into the buffer ──────────────
+            # Frame 0 was already calibrated above as the probe; reuse it.
+            # Each frame is loaded, calibrated, written to disk, then freed
+            # from RAM — peak RAM during this stage = 1 raw + 1 calibrated frame.
+            for i, path in enumerate(self.config.light_paths):
+                if i == 0:
+                    frame = _probe_cal
+                    del _probe_cal          # drop outer ref; `frame` still holds data
+                else:
+                    raw = load_image(path)
+                    frame = calibrate_light(raw, master_dark, flat_divisor=flat_div)
+                    del raw
+                if is_colour and frame.ndim == 2:
+                    frame = debayer(frame, self.config.bayer_pattern)
+                frame_buf[i] = frame        # write to disk
+                del frame                   # free from RAM; data is now in the buffer
+                self._report_progress(i + 1, n_frames, "Calibrating")
+                self._check_cancel()
 
-            # Measure PSF if needed for weighted stacking or deconvolution
-            need_psf = (
-                self.config.stacking_method == "weighted_mean"
-                or self.config.deconvolve
-            )
-            if need_psf:
-                self._report("Measuring star PSF profiles...")
-                psf_scores = score_frames(aligned)
-                valid_fwhms = [
-                    s.fwhm for s in psf_scores if np.isfinite(s.fwhm)
-                ]
-                if valid_fwhms:
-                    self.measured_fwhm = float(np.median(valid_fwhms))
-                    self._report(
-                        f"Median PSF FWHM = {self.measured_fwhm:.2f}px "
-                        f"({len(valid_fwhms)} frames measured)"
-                    )
+            if is_colour:
+                self._report(
+                    f"Calibration and debayer complete — "
+                    f"frames are now RGB {final_frame_shape}"
+                )
+            else:
+                self._report("Camera set to Mono — skipping debayer")
 
-            # For weighted mean: compute quality weights from PSF scores
-            if self.config.stacking_method == "weighted_mean":
-                # Combined weight: sharper AND rounder = higher weight
-                weights = np.array([
-                    (1.0 / max(s.fwhm, 0.1)) * s.roundness
-                    for s in psf_scores
-                ], dtype=np.float32)
-                kwargs["weights"] = weights
-                for s in psf_scores:
-                    w = weights[s.index]
-                    self._report(
+            # ── Auto frame rejection (PSF-based) ──────────────────────────────
+            self.rejected_paths = []
+            accepted_indices = list(range(n_frames))   # default: use all frames
+
+            if self.config.auto_reject and n_frames >= 3:
+                self._report("Scoring frame quality (PSF fitting)...")
+                # frame_view() gives the stacker a zero-copy memmap view;
+                # score_frames reads each frame from disk as needed.
+                score_views = [frame_buf.frame_view(i) for i in range(n_frames)]
+                scores = score_frames(score_views, self.config.rejection_sigma)
+                del score_views
+                kept = []
+                for s in scores:
+                    label = (
                         f"  Frame {s.index}: FWHM={s.fwhm:.2f}px  "
-                        f"Ecc={s.eccentricity:.2f}  weight={w:.3f}"
+                        f"Ecc={s.eccentricity:.2f}  Round={s.roundness:.2f}  "
+                        f"Stars={s.n_stars}"
                     )
+                    if s.keep:
+                        kept.append(s.index)
+                        self._report(f"{label} — kept")
+                    else:
+                        self.rejected_paths.append(
+                            self.config.light_paths[s.index]
+                        )
+                        self._report(f"{label} — REJECTED")
+                if len(kept) >= 2:
+                    self._report(
+                        f"Frame rejection: kept {len(kept)}/{n_frames}, "
+                        f"rejected {len(self.rejected_paths)}"
+                    )
+                    accepted_indices = kept
+                else:
+                    self._report("Too few frames would remain — keeping all")
+                    self.rejected_paths = []
+                self._check_cancel()
 
-            result = stack_images(aligned, method=self.config.stacking_method, **kwargs)
-        self._check_cancel()
+            self.accepted_count = len(accepted_indices)
+            n_accepted = self.accepted_count
+
+            # ── Align frames in-place in the buffer ───────────────────────────
+            # Each frame is read from disk into RAM, aligned to the reference,
+            # then written back to its original slot in the buffer (overwriting
+            # the pre-alignment data).  Peak RAM = reference + source frame +
+            # alignment scratch ≈ 3 × frame_size instead of 2 × full dataset.
+            self._report("Aligning frames...")
+            ref_idx = min(self.config.reference_frame, n_accepted - 1)
+            ref_buf_idx = accepted_indices[ref_idx]
+
+            reference = frame_buf[ref_buf_idx]   # RAM copy via __getitem__
+            is_color = reference.ndim == 3
+            if is_color:
+                ref_lum = _normalise_for_alignment(np.mean(reference, axis=2))
+                ref_channels_norm = [
+                    _normalise_for_alignment(reference[:, :, c])
+                    for c in range(reference.shape[2])
+                ]
+            else:
+                ref_lum = _normalise_for_alignment(reference)
+                ref_channels_norm = []
+
+            valid_indices: list[int] = []   # buffer slots ready for stacking
+            align_failed = 0
+
+            for out_i, buf_i in enumerate(accepted_indices):
+                frame = frame_buf[buf_i]         # RAM copy
+
+                if buf_i == ref_buf_idx:
+                    valid_indices.append(buf_i)
+                    self._report(f"  Frame {out_i}: reference (kept as-is)")
+                else:
+                    args = (out_i, frame, ref_lum, ref_channels_norm,
+                            reference, is_color)
+                    _, aligned_frame, error_msg = _align_single_frame(args)
+                    del frame
+                    if aligned_frame is not None:
+                        frame_buf[buf_i] = aligned_frame   # write aligned data back
+                        del aligned_frame
+                        valid_indices.append(buf_i)
+                    else:
+                        align_failed += 1
+                        self._report(
+                            f"  Frame {out_i} alignment failed — skipping: "
+                            f"{error_msg[:120]}"
+                        )
+
+                self._report_progress(out_i + 1, n_accepted, "Aligning")
+                self._check_cancel()
+
+            del reference, ref_lum, ref_channels_norm
+
+            self._report(
+                f"Alignment: {len(valid_indices)}/{n_accepted} succeeded, "
+                f"{align_failed} failed"
+            )
+            self._check_cancel()
+
+            if len(valid_indices) < 2:
+                raise ValueError(
+                    f"Only {len(valid_indices)} frame(s) aligned successfully. "
+                    "Need at least 2 to stack."
+                )
+
+            # Memmap views: zero-copy references into the buffer.
+            # The OS pages each frame strip into RAM on demand during stacking.
+            valid_views = [frame_buf.frame_view(i) for i in valid_indices]
+
+            # ── Stage 4: Stack ────────────────────────────────────────────────
+            if self.config.drizzle:
+                self._report(
+                    f"Drizzle stacking {len(valid_views)} frames "
+                    f"({self.config.drizzle_scale}x upscale)..."
+                )
+                result = drizzle_stack(
+                    valid_views, scale=self.config.drizzle_scale
+                )
+            else:
+                self._report(
+                    f"Stacking {len(valid_views)} frames "
+                    f"({self.config.stacking_method})..."
+                )
+
+                # Build kwargs relevant to the chosen stacking method.
+                kwargs = {
+                    "sigma_low": self.config.sigma_low,
+                    "sigma_high": self.config.sigma_high,
+                    "pct_low": self.config.percentile_low,
+                    "pct_high": self.config.percentile_high,
+                }
+
+                # Measure PSF if needed for weighted stacking or deconvolution
+                need_psf = (
+                    self.config.stacking_method == "weighted_mean"
+                    or self.config.deconvolve
+                )
+                if need_psf:
+                    self._report("Measuring star PSF profiles...")
+                    psf_scores = score_frames(valid_views)
+                    valid_fwhms = [
+                        s.fwhm for s in psf_scores if np.isfinite(s.fwhm)
+                    ]
+                    if valid_fwhms:
+                        self.measured_fwhm = float(np.median(valid_fwhms))
+                        self._report(
+                            f"Median PSF FWHM = {self.measured_fwhm:.2f}px "
+                            f"({len(valid_fwhms)} frames measured)"
+                        )
+
+                if self.config.stacking_method == "weighted_mean":
+                    weights = np.array([
+                        (1.0 / max(s.fwhm, 0.1)) * s.roundness
+                        for s in psf_scores
+                    ], dtype=np.float32)
+                    kwargs["weights"] = weights
+                    for s in psf_scores:
+                        w = weights[s.index]
+                        self._report(
+                            f"  Frame {s.index}: FWHM={s.fwhm:.2f}px  "
+                            f"Ecc={s.eccentricity:.2f}  weight={w:.3f}"
+                        )
+
+                result = stack_images(
+                    valid_views, method=self.config.stacking_method, **kwargs
+                )
+            self._check_cancel()
+
+        # frame_buf context exits here — temp file flushed and deleted.
 
         # Cache raw stack so post-processing can be re-applied without re-stacking
         self._raw_stack = result.copy()

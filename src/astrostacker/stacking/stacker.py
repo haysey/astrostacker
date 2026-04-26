@@ -7,12 +7,38 @@ import numpy as np
 from astrostacker.stacking.methods import METHODS
 
 
-# Row strip height used by _chunked_stack.  Larger values run slightly
-# faster (fewer passes) but use proportionally more RAM per strip.
-# At 128 rows, 36 ASI294MC colour frames = 128 × 4144 × 3 × 36 × 4 B
-# ≈ 144 MB per strip — comfortably under the old np.array() approach
-# which needed a full extra ~5 GB copy of all frames simultaneously.
+# Default row strip height for _chunked_stack.
+# Larger = fewer passes (faster) but more RAM per strip.
+# Overridden downward by _adaptive_chunk_rows() for large frame counts
+# so that the strip always fits comfortably in RAM.
 _CHUNK_ROWS = 128
+
+
+def _adaptive_chunk_rows(n_frames: int, width: int, channels: int = 1) -> int:
+    """Return a chunk-row count that caps strip RAM at ~1.5 GB.
+
+    For small frame counts (≤ ~30) the default 128 rows is fine — the
+    strip is only a few hundred MB.  For large counts (hundreds of frames)
+    128 rows would create a 4–8 GB strip that exhausts RAM on typical
+    machines.  This function scales the strip height down so that the
+    working data per strip stays under 1.5 GB regardless of frame count.
+
+    The factor of 2 in the denominator accounts for the intermediate
+    ``np.stack`` array that exists alongside the list elements before the
+    strip is assembled into a single contiguous block.
+
+    Args:
+        n_frames: Number of frames being stacked.
+        width:    Image width in pixels.
+        channels: Number of colour channels (1 for mono, 3 for RGB).
+
+    Returns:
+        Row count in [1, _CHUNK_ROWS].
+    """
+    target_bytes = 1.5 * 1024 ** 3          # 1.5 GiB target per strip
+    bytes_per_row = n_frames * width * channels * 4 * 2  # float32, ×2 for stack copy
+    rows = int(target_bytes / max(bytes_per_row, 1))
+    return max(1, min(rows, _CHUNK_ROWS))
 
 
 def _normalise_frame_shapes(images: list[np.ndarray]) -> list[np.ndarray]:
@@ -96,7 +122,7 @@ def _reject_outlier_pixels(strip: np.ndarray, threshold: float = 10.0) -> np.nda
 def _chunked_stack(
     images: list[np.ndarray],
     method_fn,
-    chunk_rows: int = _CHUNK_ROWS,
+    chunk_rows=None,
     **valid_kwargs,
 ) -> np.ndarray:
     """Stack frames in row strips to avoid creating the full 4-D array.
@@ -123,8 +149,14 @@ def _chunked_stack(
     first = images[0]
     H, W = first.shape[:2]
     is_colour = first.ndim == 3
-    out_shape = (H, W, first.shape[2]) if is_colour else (H, W)
+    C = first.shape[2] if is_colour else 1
+    out_shape = (H, W, C) if is_colour else (H, W)
     result = np.empty(out_shape, dtype=np.float32)
+
+    # Choose strip height: scale down for large frame counts so that each
+    # strip fits in ~1.5 GB of RAM even on machines with 8–16 GB.
+    if chunk_rows is None:
+        chunk_rows = _adaptive_chunk_rows(len(images), W, C)
 
     for r0 in range(0, H, chunk_rows):
         r1 = min(r0 + chunk_rows, H)
