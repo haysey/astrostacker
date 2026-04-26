@@ -10,6 +10,7 @@ from typing import Callable
 import numpy as np
 
 import tempfile as _tempmod
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from astrostacker.alignment.align import (
     _normalise_for_alignment,
@@ -345,33 +346,88 @@ class Pipeline:
                 ref_lum = _normalise_for_alignment(reference)
                 ref_channels_norm = []
 
-            valid_indices: list[int] = []   # buffer slots ready for stacking
+            # Parallel alignment across CPU cores.
+            #
+            # WHY parallel is now safe (it wasn't before memmap):
+            #   Previously, all frames lived in RAM as Python lists.  Running
+            #   N worker threads meant N frames being read + N aligned copies
+            #   being written simultaneously — on top of the full frame list
+            #   already in RAM.  Peak RAM could reach 3× the full dataset.
+            #
+            #   With memmap, each thread reads one frame from disk (~140 MB),
+            #   aligns it (CPU-bound: star detection + affine transform), then
+            #   writes the result back to the SAME disk slot before moving on.
+            #   Peak RAM = n_workers × ~400 MB regardless of total frame count.
+            #   On an 8-core / 8 GB machine that is ≈ 3 GB — well within budget.
+            #
+            #   numpy and SciPy release the GIL during their heavy C-level work,
+            #   so threads genuinely run in parallel across all CPU cores.
+            workers = optimal_workers(io_bound=False)
+            self._report(
+                f"Aligning {n_accepted} frames across {workers} cores..."
+            )
+
             align_failed = 0
+            completed = 0
+            succeeded_out_i: set[int] = set()   # out_i values that aligned OK
 
-            for out_i, buf_i in enumerate(accepted_indices):
-                frame = frame_buf[buf_i]         # RAM copy
+            # Reference frame needs no computation — mark it done immediately.
+            self._report(f"  Frame {ref_idx}: reference (kept as-is)")
+            completed += 1
+            self._report_progress(completed, n_accepted, "Aligning")
 
-                if buf_i == ref_buf_idx:
-                    valid_indices.append(buf_i)
-                    self._report(f"  Frame {out_i}: reference (kept as-is)")
-                else:
-                    args = (out_i, frame, ref_lum, ref_channels_norm,
-                            reference, is_color)
-                    _, aligned_frame, error_msg = _align_single_frame(args)
-                    del frame
-                    if aligned_frame is not None:
-                        frame_buf[buf_i] = aligned_frame   # write aligned data back
-                        del aligned_frame
-                        valid_indices.append(buf_i)
-                    else:
-                        align_failed += 1
-                        self._report(
-                            f"  Frame {out_i} alignment failed — skipping: "
-                            f"{error_msg[:120]}"
-                        )
+            # Worker function: runs in a thread pool.
+            # Each call reads one slot from the buffer (disk → RAM), aligns,
+            # then writes the result back to the same slot (RAM → disk).
+            # Thread safety: every thread operates on a DIFFERENT buf_i slot,
+            # so there are no overlapping reads or writes in the memmap.
+            def _do_align(job):
+                out_i, buf_i = job
+                frame = frame_buf[buf_i]        # disk read → fresh RAM copy
+                args = (out_i, frame, ref_lum, ref_channels_norm,
+                        reference, is_color)
+                _, aligned_frame, error_msg = _align_single_frame(args)
+                del frame
+                if aligned_frame is not None:
+                    frame_buf[buf_i] = aligned_frame  # write aligned data back
+                    del aligned_frame
+                    return out_i, True, ""
+                return out_i, False, error_msg
 
-                self._report_progress(out_i + 1, n_accepted, "Aligning")
-                self._check_cancel()
+            non_ref_jobs = [
+                (out_i, buf_i)
+                for out_i, buf_i in enumerate(accepted_indices)
+                if buf_i != ref_buf_idx
+            ]
+
+            if non_ref_jobs:
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    future_map = {
+                        pool.submit(_do_align, job): job
+                        for job in non_ref_jobs
+                    }
+                    for future in as_completed(future_map):
+                        self._check_cancel()
+                        out_i, ok, error_msg = future.result()
+                        if ok:
+                            succeeded_out_i.add(out_i)
+                        else:
+                            align_failed += 1
+                            self._report(
+                                f"  Frame {out_i} alignment failed — skipping: "
+                                f"{error_msg[:120]}"
+                            )
+                        completed += 1
+                        self._report_progress(completed, n_accepted, "Aligning")
+
+            # Rebuild valid_indices in original accepted order.
+            # (Stacking methods are commutative across frames, so order does
+            # not affect the result — but keeping original order is tidy.)
+            valid_indices = [
+                buf_i
+                for out_i, buf_i in enumerate(accepted_indices)
+                if buf_i == ref_buf_idx or out_i in succeeded_out_i
+            ]
 
             del reference, ref_lum, ref_channels_norm
 
