@@ -781,16 +781,10 @@ class MainWindow(QMainWindow):
             output_path=sp.get_output_path(),
             reference_frame=sp.get_reference_frame(),
             auto_reject=sp.get_auto_reject(),
-            remove_gradient=sp.get_remove_gradient(),
-            local_normalise=sp.get_local_normalise(),
-            denoise=sp.get_denoise(),
-            denoise_strength=sp.get_denoise_strength(),
-            deconvolve=sp.get_deconvolve(),
-            deconv_strength=sp.get_deconv_strength(),
             auto_crop=sp.get_auto_crop(),
             drizzle=sp.get_drizzle(),
-            # star_reduce and colour_balance are handled exclusively in the
-            # PostProcessDialog — they default to False in PipelineConfig.
+            # gradient removal, denoise, sharpen, star_reduce and colour_balance
+            # are handled exclusively in PostProcessDialog (default False here).
         )
 
     def _on_open_postprocess(self):
@@ -1010,12 +1004,6 @@ class MainWindow(QMainWindow):
             "output_path": self.settings_panel.get_output_path(),
             "reference_frame": self.settings_panel.get_reference_frame(),
             "auto_reject": self.settings_panel.get_auto_reject(),
-            "remove_gradient": self.settings_panel.get_remove_gradient(),
-            "local_normalise": self.settings_panel.get_local_normalise(),
-            "denoise": self.settings_panel.get_denoise(),
-            "denoise_strength": self.settings_panel.get_denoise_strength(),
-            "deconvolve": self.settings_panel.get_deconvolve(),
-            "deconv_strength": self.settings_panel.get_deconv_strength(),
             "auto_crop": self.settings_panel.get_auto_crop(),
             "drizzle": self.settings_panel.get_drizzle(),
             "auto_solve": self.settings_panel.get_auto_solve(),
@@ -1093,18 +1081,6 @@ class MainWindow(QMainWindow):
             self.settings_panel.bayer_combo.setCurrentIndex(idx)
 
         self.settings_panel.auto_reject_check.setChecked(session.get("auto_reject", False))
-        self.settings_panel.gradient_check.setChecked(session.get("remove_gradient", False))
-        self.settings_panel.local_norm_check.setChecked(session.get("local_normalise", False))
-        self.settings_panel.denoise_check.setChecked(session.get("denoise", False))
-        strength = session.get("denoise_strength", "medium")
-        idx = self.settings_panel.denoise_strength_combo.findData(strength)
-        if idx >= 0:
-            self.settings_panel.denoise_strength_combo.setCurrentIndex(idx)
-        self.settings_panel.deconv_check.setChecked(session.get("deconvolve", False))
-        deconv_str = session.get("deconv_strength", "medium")
-        idx = self.settings_panel.deconv_strength_combo.findData(deconv_str)
-        if idx >= 0:
-            self.settings_panel.deconv_strength_combo.setCurrentIndex(idx)
         self.settings_panel.auto_crop_check.setChecked(session.get("auto_crop", False))
         self.settings_panel.drizzle_check.setChecked(session.get("drizzle", False))
         self.settings_panel.auto_solve_check.setChecked(session.get("auto_solve", False))

@@ -238,103 +238,12 @@ class SettingsPanel(QWidget):
         )
         proc_layout.addRow(self.auto_reject_check)
 
-        self.gradient_check = QCheckBox("Remove light pollution gradient")
-        self.gradient_check.setToolTip(
-            "Great for images taken from suburban areas or under moonlight.\n"
-            "Fits and subtracts a smooth background surface from the final\n"
-            "stack to remove uneven sky brightness and vignetting."
-        )
-        proc_layout.addRow(self.gradient_check)
-
-        self.local_norm_check = QCheckBox("Local normalisation (per-frame)")
-        self.local_norm_check.setToolTip(
-            "Removes sky gradients from each frame individually, before\n"
-            "alignment. Useful for multi-hour sessions where sky brightness\n"
-            "changed significantly between frames.\n"
-            "\n"
-            "For most targets: use 'Remove light pollution gradient' instead —\n"
-            "it runs on the final stack after Auto-crop clears the alignment\n"
-            "borders, giving a cleaner result without per-frame artefacts.\n"
-            "\n"
-            "Caution: on targets that fill the entire field of view (large\n"
-            "emission nebulae), per-frame correction can create a mottled\n"
-            "background in the stack. Do not combine with 'Remove light\n"
-            "pollution gradient' — use one or the other."
-        )
-        proc_layout.addRow(self.local_norm_check)
-
         self.auto_crop_check = QCheckBox("Auto-crop stacking edges")
         self.auto_crop_check.setToolTip(
             "Recommended. Automatically trims the dark borders created\n"
             "by frame alignment, giving a clean rectangular result."
         )
         proc_layout.addRow(self.auto_crop_check)
-
-        # Denoise row: checkbox + strength combo side by side
-        denoise_row = QHBoxLayout()
-        denoise_row.setSpacing(12)
-        denoise_row.setContentsMargins(0, 0, 0, 0)
-
-        self.denoise_check = QCheckBox("Denoise")
-        self.denoise_check.setToolTip(
-            "Apply Non-Local Means denoising to the stacked result.\n"
-            "Works best on compact targets (galaxies, clusters, planetary\n"
-            "nebulae) where clear sky background is visible.\n"
-            "\n"
-            "On targets that fill the entire frame (large emission nebulae),\n"
-            "denoising may add unwanted texture — try without it first.\n"
-            "No model files or GPU required."
-        )
-        self.denoise_check.toggled.connect(self._on_denoise_toggled)
-        denoise_row.addWidget(self.denoise_check)
-
-        self.denoise_strength_combo = QComboBox()
-        self.denoise_strength_combo.addItem("Light", "light")
-        self.denoise_strength_combo.addItem("Medium", "medium")
-        self.denoise_strength_combo.addItem("Strong", "strong")
-        self.denoise_strength_combo.setCurrentIndex(1)  # Medium default
-        self.denoise_strength_combo.setMinimumWidth(100)
-        self.denoise_strength_combo.setEnabled(False)
-        self.denoise_strength_combo.setToolTip(
-            "Light — subtle smoothing, safest for detail.\n"
-            "Medium — good balance (recommended).\n"
-            "Strong — aggressive, best for very noisy stacks."
-        )
-        denoise_row.addWidget(self.denoise_strength_combo)
-        denoise_row.addStretch()
-
-        proc_layout.addRow(denoise_row)
-
-        # Sharpen row: checkbox + strength combo side by side
-        sharpen_row = QHBoxLayout()
-        sharpen_row.setSpacing(12)
-        sharpen_row.setContentsMargins(0, 0, 0, 0)
-
-        self.deconv_check = QCheckBox("Sharpen")
-        self.deconv_check.setToolTip(
-            "Sharpen the stacked result using the measured star\n"
-            "profiles. Tightens stars and reveals fine detail.\n"
-            "Works best on well-exposed stacks with good SNR."
-        )
-        self.deconv_check.toggled.connect(self._on_deconv_toggled)
-        sharpen_row.addWidget(self.deconv_check)
-
-        self.deconv_strength_combo = QComboBox()
-        self.deconv_strength_combo.addItem("Light", "light")
-        self.deconv_strength_combo.addItem("Medium", "medium")
-        self.deconv_strength_combo.addItem("Strong", "strong")
-        self.deconv_strength_combo.setCurrentIndex(1)  # Medium default
-        self.deconv_strength_combo.setMinimumWidth(100)
-        self.deconv_strength_combo.setEnabled(False)
-        self.deconv_strength_combo.setToolTip(
-            "Light — subtle, safest for any stack.\n"
-            "Medium — good balance (recommended).\n"
-            "Strong — aggressive, best for high-SNR stacks."
-        )
-        sharpen_row.addWidget(self.deconv_strength_combo)
-        sharpen_row.addStretch()
-
-        proc_layout.addRow(sharpen_row)
 
         self.drizzle_check = QCheckBox("Drizzle (2x resolution)")
         self.drizzle_check.setToolTip(
@@ -361,12 +270,12 @@ class SettingsPanel(QWidget):
             "If you have already run a stack this session, the stacked\n"
             "image opens automatically.\n\n"
             "Otherwise, a file picker lets you load any existing FITS file.\n\n"
-            "Inside you can apply (and compare before/after):\n"
-            "  • Auto-crop & gradient removal\n"
-            "  • Sharpening & denoising\n"
-            "  • Star reduction\n"
-            "  • Colour balance\n\n"
-            "Save the result as FITS, TIFF, JPEG, or PNG."
+            "Step-by-step workflow inside:\n"
+            "  ❶ Background — gradient removal & auto-crop\n"
+            "  ❷ Enhance    — denoise & sharpen\n"
+            "  ❸ Stars      — star brightness reduction\n"
+            "  ❹ Colour     — colour balance\n"
+            "  ❺ Save       — FITS, TIFF, JPEG, or PNG"
         )
         self.postprocess_btn.clicked.connect(self.postprocess_requested.emit)
         layout.addSpacing(4)
@@ -406,12 +315,6 @@ class SettingsPanel(QWidget):
         self._set_row_visible(self.sigma_high_spin, show_sigma)
         self._set_row_visible(self.pct_low_spin, show_pct)
         self._set_row_visible(self.pct_high_spin, show_pct)
-
-    def _on_denoise_toggled(self, checked: bool):
-        self.denoise_strength_combo.setEnabled(checked)
-
-    def _on_deconv_toggled(self, checked: bool):
-        self.deconv_strength_combo.setEnabled(checked)
 
     # ── Browse ──
 
@@ -460,26 +363,8 @@ class SettingsPanel(QWidget):
     def get_auto_reject(self) -> bool:
         return self.auto_reject_check.isChecked()
 
-    def get_remove_gradient(self) -> bool:
-        return self.gradient_check.isChecked()
-
-    def get_local_normalise(self) -> bool:
-        return self.local_norm_check.isChecked()
-
     def get_auto_crop(self) -> bool:
         return self.auto_crop_check.isChecked()
-
-    def get_denoise(self) -> bool:
-        return self.denoise_check.isChecked()
-
-    def get_denoise_strength(self) -> str:
-        return self.denoise_strength_combo.currentData()
-
-    def get_deconvolve(self) -> bool:
-        return self.deconv_check.isChecked()
-
-    def get_deconv_strength(self) -> str:
-        return self.deconv_strength_combo.currentData()
 
     def get_drizzle(self) -> bool:
         return self.drizzle_check.isChecked()
