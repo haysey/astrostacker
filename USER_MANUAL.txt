@@ -49,12 +49,13 @@ TABLE OF CONTENTS
   9.  Preview Panel & Histogram
  10.  Post-Processing Window
        10.1 How the Preview Works
-       10.2 Cleanup
-       10.3 Enhance
-       10.4 Star Brightness Reduction
-       10.5 Colour Balance
-       10.6 Crop Tool
-       10.7 Applying Changes and Saving
+       10.2 Colour Balance (❶)
+       10.3 Tone Adjustment (❷)
+       10.4 Background (❸)
+       10.5 Enhance (❹)
+       10.6 Star Brightness Reduction (❺)
+       10.7 Crop Tool
+       10.8 Applying Changes and Saving
  11.  Plate Solve Tab
        11.1 What is Plate Solving?
        11.2 Getting a Free API Key
@@ -735,29 +736,133 @@ use it after stacking to apply finishing touches, then compare directly with
 the original before saving.
 
 To open: after a stack completes, click  File > Post-Process...  or use the
-post-process button that appears in the preview toolbar. The window works on
-the currently displayed image.
+post-process button that appears in the preview toolbar. The window opens
+maximised to fill your screen and works on the currently displayed image.
 
-The window is non-destructive — your original stacked file is never modified.
-Every Apply starts fresh from the unprocessed data, so you can freely adjust
-settings and click Apply as many times as you like.
+Processing is cumulative — each Apply updates the working result, which
+becomes the starting point for the next Apply. This lets you build up
+adjustments step by step. Up to 5 Undo levels are available at any time.
+Your original stacked file on disk is never modified.
+
+The controls panel on the right is organised into six steps, shown in the
+indicator bar at the top of the panel:
+
+  ❶  Colour Balance  — correct green casts and channel imbalances
+  ❷  Tone           — adjust Brightness, Contrast, and Saturation
+  ❸  Background     — remove gradients and crop alignment borders
+  ❹  Enhance        — sharpen and denoise
+  ❺  Stars          — reduce dominant star brightness
+  ❻  Save           — save the result as FITS, TIFF, JPEG, or PNG
 
 ── 10.1  HOW THE PREVIEW WORKS ────────────────────────────────────────────────
 
-The window has a large image preview on the left (with the same Stretch and
-Zoom controls as the main Preview panel) and a controls panel on the right.
+The window has a large image preview on the left and a controls panel on the
+right. Use the scroll wheel to zoom in and out on the preview, and click and
+drag to pan.
 
-When you click Apply, the display is locked to the same stretch scale that
-was computed from the original unprocessed image. This "locked stretch" keeps
-before and after views on the same brightness axis — without it, the
-auto-stretch would compensate for reduced star brightness and make effects
-like star reduction appear invisible.
+Stretch controls
+  A "Stretch" dropdown above the preview selects how the image is displayed.
+  All stretching is display-only — the underlying data is always saved as
+  linear float32.
 
-Use the "Show Original" toggle below the preview to switch between the
-processed result and the original at any time. Both views use the locked
-stretch for a fair comparison.
+    Auto – Gentle   Subtle stretch. Background appears lighter. Good for
+                    judging faint structure without clipping highlights.
+    Auto – Normal   The default setting. Moderate background brightness
+                    suited to most targets.
+    Auto – Strong   More aggressive midtone pull. Useful for revealing faint
+                    emission or targets buried in a bright region.
+    Auto – Max      Maximum stretch. Very dark background. For extremely
+                    faint targets.
+    Linear          No stretch. Pixel values displayed as-is. Most images
+                    will appear nearly black in Linear mode — this is correct
+                    for a raw linear FITS file.
 
-── 10.2  CLEANUP ───────────────────────────────────────────────────────────────
+Automatic green cast correction
+  Raw Bayer-pattern images from colour cameras often carry a strong green
+  tint — the RGGB sensor pattern has two green photosites per four-pixel
+  block, producing roughly twice the green signal compared with red or blue.
+  The preview automatically neutralises this by sampling the sky background
+  in the image corners and scaling each channel to a common grey level.
+  This correction is display-only and is never baked into the saved file.
+  To apply it permanently to the data, use Colour Balance ❶ with Auto mode.
+
+Cumulative processing and Undo
+  Each time you click Apply, the processed result becomes the new working
+  image. The next Apply starts from this updated state. This lets you chain
+  adjustments: apply Colour Balance first, then Tone, then gradient removal —
+  each step refines the result of the previous one.
+
+  The Undo button (↩) reverses the last Apply. Up to 5 Undo levels are
+  stored. Click Reset to Original to discard all processing and return to
+  the original stack.
+
+Show Original
+  Toggle this button at any time to compare the current processed state with
+  the original stacked image. The preview switches between the two at the
+  same stretch scale so brightness can be compared fairly.
+
+── 10.2  COLOUR BALANCE (❶) ────────────────────────────────────────────────────
+
+Adjusts the relative brightness of the red, green, and blue channels. Use
+this to correct a colour cast from:
+  - Light pollution (orange/green tint from city skies)
+  - Atmospheric airglow (reddish tint from oxygen and sodium emission)
+  - Bayer sensor channel imbalance (green excess from RGGB sensors)
+  - Narrowband filter leakage
+
+Auto (recommended)
+  Samples the sky background from the image corners and automatically
+  neutralises any colour cast. Tick "Enable colour balance" and leave
+  "Auto (recommended)" checked for a one-click correction. This is the
+  same background-neutralisation algorithm used in the preview display,
+  but applied permanently to the data.
+
+Manual adjustment
+  Uncheck "Auto (recommended)" to access the R, G, and B sliders.
+  Each channel has a multiplier from 0.50× to 2.00×:
+  - 1.00× = no change (default).
+  - Above 1.00× = brighter (boost the channel).
+  - Below 1.00× = dimmer (reduce the channel).
+
+  Each slider has a paired numeric spinbox — type a value directly (e.g.
+  1.35) for precise entry without dragging.
+
+Colour balance has no effect on monochrome (single-channel) images.
+
+Recommended workflow: run Colour Balance first (❶) before Tone (❷). The
+Auto mode neutralises the sky cast to a flat grey, giving Tone adjustments
+a clean baseline to work from.
+
+── 10.3  TONE ADJUSTMENT (❷) ───────────────────────────────────────────────────
+
+Adjusts the global brightness, contrast, and colour saturation of the image.
+All three controls are applied together in a single Apply pass.
+
+  Brightness  −100 … +100 %.  Scales all pixel values exponentially
+              (2^(amount/100) factor). +100 doubles the brightness; −100
+              halves it. Each step feels perceptually equal, like
+              photographic exposure stops.
+
+  Contrast    −100 … +100 %.  Expands (positive) or compresses (negative)
+              the pixel value range relative to the sky floor. The sky
+              background stays anchored while bright nebulae and stars are
+              pulled further from it (positive) or pushed closer (negative).
+
+  Saturation  −100 … +100 %.  Scales colour deviation from grey. +100
+              doubles the vividness of all colours; −100 converts the
+              image to greyscale; 0 leaves colours unchanged. Only affects
+              colour (RGB) images — monochrome images are returned unchanged.
+
+How to use:
+  1. Tick "Tone adjustment" to enable the section.
+  2. Set Brightness, Contrast, and Saturation using the sliders or
+     spinboxes.
+  3. Click Apply and use "Show Original" to compare.
+
+  Because processing is cumulative, a second Tone Apply adds on top of the
+  first. Click Undo (↩) to reverse if the result overshoots.
+
+── 10.4  BACKGROUND (❸) ────────────────────────────────────────────────────────
 
 Auto-crop edges
   Trims dark alignment borders from the stacked result. Same operation as
@@ -765,11 +870,11 @@ Auto-crop edges
   to enable if Auto-Crop was not used during the pipeline run.
 
 Remove gradient
-  Fits and subtracts a smooth sky background to correct light pollution,
-  moonlight, or vignetting. Same algorithm as Section 7.2 (Remove Light
-  Pollution Gradient), applied to the stack interactively.
+  Fits and subtracts a smooth sky background surface to correct light
+  pollution, moonlight, or vignetting. Same algorithm as Section 7.2
+  (Remove Light Pollution Gradient), applied to the stack interactively.
 
-── 10.3  ENHANCE ───────────────────────────────────────────────────────────────
+── 10.5  ENHANCE (❹) ───────────────────────────────────────────────────────────
 
 Sharpen
   PSF-informed sharpening. See Section 7.6 for full details.
@@ -779,7 +884,7 @@ Denoise
   Non-Local Means denoising. See Section 7.5 for full details.
   Presets: Light / Medium / Strong.
 
-── 10.4  STAR BRIGHTNESS REDUCTION ────────────────────────────────────────────
+── 10.6  STAR BRIGHTNESS REDUCTION (❺) ────────────────────────────────────────
 
 Reduces the brightness of stars in the stacked image, making faint nebulosity
 and background structure more visible relative to dominant stars. Useful when
@@ -818,38 +923,7 @@ How to use:
   3. Click Apply and use "Show Original" to compare the result.
   4. Adjust Strength and Apply again if needed.
 
-── 10.5  COLOUR BALANCE ────────────────────────────────────────────────────────
-
-Adjusts the relative brightness of the red, green, and blue channels. Use
-this to correct a colour cast from:
-  - Light pollution (orange/green tint from city skies)
-  - Atmospheric airglow (reddish tint from oxygen and sodium emission)
-  - Bayer sensor channel imbalance
-  - Narrowband filter leakage
-
-Auto (recommended)
-  Samples the sky background from the image corners and automatically
-  neutralises any colour cast. Tick "Enable colour balance" and leave
-  "Auto (recommended)" checked for a one-click correction.
-
-Manual adjustment
-  Uncheck "Auto (recommended)" to access the R, G, and B sliders.
-  Each channel has a multiplier from 0.50× to 2.00×:
-  - 1.00× = no change (default).
-  - Above 1.00× = brighter (boost the channel).
-  - Below 1.00× = dimmer (reduce the channel).
-
-  Each slider has a paired numeric spinbox — type a value directly (e.g.
-  1.35) without having to drag the slider.
-
-  Tip: The preview uses luminance-linked auto-stretch, which derives its
-  scale from all three channels together. Colour adjustments are always
-  clearly visible — a change to Red is not silently cancelled by the
-  stretch renormalising only the Red channel.
-
-Colour balance has no effect on monochrome (single-channel) images.
-
-── 10.6  CROP TOOL ─────────────────────────────────────────────────────────────
+── 10.7  CROP TOOL ─────────────────────────────────────────────────────────────
 
 Selects a rectangular region of the image to keep, discarding everything
 outside it. Useful for:
@@ -865,9 +939,9 @@ How to use:
   3. Release the mouse. The crop region is confirmed automatically. The
      dimensions and position appear in the toggle bar
      (e.g. "Crop: 3840×2160 px at 120,80").
-  4. Click Apply. The crop is applied to the original unprocessed image,
-     not to the already-processed result — you can combine crop with any
-     other option in the same Apply pass.
+  4. Click Apply. The crop is applied to the current working result
+     (which may already include previously applied steps). To crop the
+     original stack, click Reset to Original first.
 
 To remove the crop selection:
   Click "✕ Clear" (appears once a crop is set), or click Reset to Original.
@@ -877,30 +951,35 @@ Notes:
   - A minimum selection of 10×10 pixels is required to confirm a crop.
   - The crop selection is remembered across Apply passes until cleared.
 
-── 10.7  APPLYING CHANGES AND SAVING ───────────────────────────────────────────
+── 10.8  APPLYING CHANGES AND SAVING (❻) ───────────────────────────────────────
 
 ▶ Apply
-  Runs all ticked options on the original stacked image and updates the
+  Runs all ticked options on the current working image and updates the
   preview. Processing runs on a background thread — the Apply button is
-  greyed out until the run completes. A status message at the bottom of the
-  controls panel shows progress.
+  greyed out until the run completes. A status message at the bottom of
+  the controls panel shows progress.
 
-  Each Apply starts from the original unprocessed data (not from the previous
-  Apply result), so settings are fully independent of each other.
+  After Apply completes, the result becomes the new working image. The next
+  Apply starts from here, letting you chain adjustments step by step.
+
+↩ Undo
+  Reverses the last Apply, restoring the working image to its state before
+  that Apply ran. Up to 5 Undo levels are stored.
 
 Reset to Original
-  Returns the preview to the unprocessed original. All control settings are
-  preserved so you can adjust and Apply again.
+  Discards all processing and returns the working image to the original
+  unprocessed stack. All control settings are preserved so you can
+  reconfigure and Apply again.
 
 Save FITS...
-  Saves the current result as a 32-bit floating-point FITS file — the best
-  format for further processing in PixInsight, Siril, or any other tool.
-  If no processing has been applied, the original stack is saved.
+  Saves the current working result as a 32-bit floating-point FITS file —
+  the best format for further processing in PixInsight, Siril, or any other
+  tool. If no processing has been applied, the original stack is saved.
 
 Save TIFF...  /  Save JPEG...  /  Save PNG...
-  Saves a stretched, display-ready version of the current result. Each format
-  applies a fresh auto-stretch at save time, so the saved image is correctly
-  exposed regardless of the current preview stretch mode.
+  Saves a stretched, display-ready version of the current result. Each
+  format applies a fresh auto-stretch at save time, so the saved image is
+  correctly exposed regardless of the current preview stretch mode.
 
   TIFF  — 8-bit stretched. Good for Photoshop, GIMP, or Lightroom.
   JPEG  — 8-bit compressed. Best for web sharing and online posting.

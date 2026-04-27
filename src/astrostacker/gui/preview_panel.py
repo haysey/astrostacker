@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-from PyQt6.QtCore import Qt, QPoint, QRect, pyqtSignal
+from PyQt6.QtCore import Qt, QPoint, QRect, QTimer, pyqtSignal
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -41,6 +41,11 @@ class PreviewPanel(QWidget):
         # post-processing dialog lock the display scale to the original image
         # so effects like star reduction are visible rather than compensated.
         self._fixed_stretch_params: tuple | None = None
+        # Wheel zoom: fractional scale factor (None = use combo box)
+        self._wheel_zoom = None
+        # Drag-to-pan state
+        self._pan_start_pos = None
+        self._pan_start_scroll = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -57,11 +62,17 @@ class PreviewPanel(QWidget):
         controls.addWidget(stretch_label)
 
         self.stretch_combo = QComboBox()
-        self.stretch_combo.addItems(["Auto STF", "Linear"])
-        self.stretch_combo.setFixedWidth(120)
+        self.stretch_combo.addItems(
+            ["Auto – Gentle", "Auto – Normal", "Auto – Strong", "Auto – Max", "Linear"]
+        )
+        self.stretch_combo.setCurrentIndex(1)   # default: Normal
+        self.stretch_combo.setFixedWidth(140)
         self.stretch_combo.setToolTip(
-            "Auto STF: PixInsight-style screen stretch (best for deep sky).\n"
-            "Linear: Simple min-max stretch."
+            "Auto – Gentle:  subtle stretch, bright background (target 30 %).\n"
+            "Auto – Normal:  balanced stretch, moderate background (target 20 %).\n"
+            "Auto – Strong:  aggressive stretch, dark background (target 10 %).\n"
+            "Auto – Max:     very aggressive, near-black sky (target 5 %).\n"
+            "Linear:         simple percentile-based min/max stretch."
         )
         self.stretch_combo.currentIndexChanged.connect(self._refresh_display)
         controls.addWidget(self.stretch_combo)
@@ -74,7 +85,7 @@ class PreviewPanel(QWidget):
         self.zoom_combo.addItems(["Fit", "25%", "50%", "100%", "200%"])
         self.zoom_combo.setFixedWidth(90)
         self.zoom_combo.setToolTip("Zoom level. Use 100% to inspect details at native resolution.")
-        self.zoom_combo.currentIndexChanged.connect(self._refresh_display)
+        self.zoom_combo.currentIndexChanged.connect(self._on_zoom_combo_changed)
         controls.addWidget(self.zoom_combo)
 
         controls.addStretch()
@@ -125,8 +136,20 @@ class PreviewPanel(QWidget):
         self.image_label.setText(self._empty_html)
         self.scroll_area.setWidget(self.image_label)
         self.image_label.installEventFilter(self)
+        self.scroll_area.viewport().installEventFilter(self)
 
         layout.addWidget(self.scroll_area)
+
+    @property
+    def stretch_target(self) -> float:
+        """Return the target_background for the currently chosen Auto STF preset."""
+        _targets = {
+            "Auto – Gentle": 0.30,
+            "Auto – Normal": 0.20,
+            "Auto – Strong": 0.10,
+            "Auto – Max":    0.05,
+        }
+        return _targets.get(self.stretch_combo.currentText(), 0.20)
 
     def show_file(self, path: str):
         try:
@@ -165,32 +188,21 @@ class PreviewPanel(QWidget):
                 display_data = _apply_stretch_params(arr, shadow, highlight, midtone)
         else:
             stretch_mode = self.stretch_combo.currentText()
-            if stretch_mode == "Auto STF":
-                display_data = auto_stretch(self._raw_data)
+            if stretch_mode.startswith("Auto"):
+                display_data = auto_stretch(
+                    self._raw_data, target_background=self.stretch_target
+                )
             else:
                 display_data = linear_stretch(self._raw_data)
 
         pixmap = numpy_to_qpixmap(display_data)
         self._current_pixmap = pixmap
 
-        zoom_text = self.zoom_combo.currentText()
-        if zoom_text == "Fit":
-            # Fit mode: label fills the scroll area, image scales down
-            self.scroll_area.setWidgetResizable(True)
-            self.image_label.setMinimumSize(1, 1)
-            available = self.scroll_area.viewport().size()
-            scaled = pixmap.scaled(
-                available,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            self.image_label.setPixmap(scaled)
-        else:
-            # Zoom mode: label can be larger than scroll area (scrollable)
+        if self._wheel_zoom is not None:
+            # Wheel-driven zoom: explicit fractional scale, scrollable
             self.scroll_area.setWidgetResizable(False)
-            zoom_pct = int(zoom_text.replace("%", "")) / 100.0
-            w = max(1, int(pixmap.width() * zoom_pct))
-            h = max(1, int(pixmap.height() * zoom_pct))
+            w = max(1, int(pixmap.width()  * self._wheel_zoom))
+            h = max(1, int(pixmap.height() * self._wheel_zoom))
             scaled = pixmap.scaled(
                 w, h,
                 Qt.AspectRatioMode.KeepAspectRatio,
@@ -199,10 +211,38 @@ class PreviewPanel(QWidget):
             self.image_label.setPixmap(scaled)
             self.image_label.setMinimumSize(scaled.size())
             self.image_label.resize(scaled.size())
+        else:
+            zoom_text = self.zoom_combo.currentText()
+            if zoom_text == "Fit":
+                # Fit mode: label fills the scroll area, image scales down
+                self.scroll_area.setWidgetResizable(True)
+                self.image_label.setMinimumSize(1, 1)
+                available = self.scroll_area.viewport().size()
+                scaled = pixmap.scaled(
+                    available,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self.image_label.setPixmap(scaled)
+            else:
+                # Zoom mode: label can be larger than scroll area (scrollable)
+                self.scroll_area.setWidgetResizable(False)
+                zoom_pct = int(zoom_text.replace("%", "")) / 100.0
+                w = max(1, int(pixmap.width()  * zoom_pct))
+                h = max(1, int(pixmap.height() * zoom_pct))
+                scaled = pixmap.scaled(
+                    w, h,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self.image_label.setPixmap(scaled)
+                self.image_label.setMinimumSize(scaled.size())
+                self.image_label.resize(scaled.size())
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if self._current_pixmap and self.zoom_combo.currentText() == "Fit":
+        in_fit = self._wheel_zoom is None and self.zoom_combo.currentText() == "Fit"
+        if self._current_pixmap and in_fit:
             self._refresh_display()
 
     def set_crop_mode(self, enabled: bool):
@@ -210,8 +250,11 @@ class PreviewPanel(QWidget):
         self._crop_mode = enabled
         cursor = Qt.CursorShape.CrossCursor if enabled else Qt.CursorShape.ArrowCursor
         self.image_label.setCursor(cursor)
-        if not enabled and self._rubber_band is not None:
-            self._rubber_band.hide()
+        if not enabled:
+            if self._rubber_band is not None:
+                self._rubber_band.hide()
+            self._pan_start_pos   = None
+            self._pan_start_scroll = None
 
     def _screen_to_image(self, label_pos: QPoint) -> tuple[int, int]:
         """Convert a point in image_label coordinates to original image pixel coords."""
@@ -232,32 +275,133 @@ class PreviewPanel(QWidget):
         iy = int(max(0, min(orig_h - 1, py * scale_y)))
         return ix, iy
 
+    def _on_zoom_combo_changed(self):
+        """Combo box changed: clear wheel zoom and re-render."""
+        self._wheel_zoom = None
+        self._refresh_display()
+
+    def _handle_wheel_zoom(self, event):
+        """Zoom in/out centred on the mouse cursor position in the viewport."""
+        if self._current_pixmap is None:
+            return
+
+        # Current rendered pixmap size
+        pm = self.image_label.pixmap()
+        if pm is None or pm.isNull():
+            return
+
+        # Fractional position of cursor inside the rendered pixmap
+        vp = self.scroll_area.viewport()
+        cursor_vp = event.position().toPoint()   # position in viewport coords
+
+        hbar = self.scroll_area.horizontalScrollBar()
+        vbar = self.scroll_area.verticalScrollBar()
+        # Cursor position inside the scrollable content (image_label coords)
+        content_x = cursor_vp.x() + hbar.value()
+        content_y = cursor_vp.y() + vbar.value()
+        # Offset of pixmap inside the label (AlignCenter)
+        off_x = max(0, (self.image_label.width()  - pm.width())  // 2)
+        off_y = max(0, (self.image_label.height() - pm.height()) // 2)
+        frac_x = (content_x - off_x) / max(1, pm.width())
+        frac_y = (content_y - off_y) / max(1, pm.height())
+
+        # Current scale factor
+        if self._wheel_zoom is not None:
+            current_scale = self._wheel_zoom
+        elif self.zoom_combo.currentText() == "Fit":
+            avail = vp.size()
+            fit_scale_x = avail.width()  / max(1, self._current_pixmap.width())
+            fit_scale_y = avail.height() / max(1, self._current_pixmap.height())
+            current_scale = min(fit_scale_x, fit_scale_y)
+        else:
+            pct = int(self.zoom_combo.currentText().replace("%", ""))
+            current_scale = pct / 100.0
+
+        # Scale step: ±10 % per notch
+        delta = event.angleDelta().y()
+        factor = 1.1 if delta > 0 else (1.0 / 1.1)
+        new_scale = max(0.05, min(current_scale * factor, 32.0))
+        self._wheel_zoom = new_scale
+
+        self._refresh_display()
+
+        # After Qt updates geometry, scroll so the cursor stays over the same
+        # image pixel.
+        def _adjust_scroll():
+            pm2 = self.image_label.pixmap()
+            if pm2 is None or pm2.isNull():
+                return
+            off_x2 = max(0, (self.image_label.width()  - pm2.width())  // 2)
+            off_y2 = max(0, (self.image_label.height() - pm2.height()) // 2)
+            target_x = int(frac_x * pm2.width()  + off_x2 - cursor_vp.x())
+            target_y = int(frac_y * pm2.height() + off_y2 - cursor_vp.y())
+            hbar.setValue(max(0, target_x))
+            vbar.setValue(max(0, target_y))
+
+        QTimer.singleShot(0, _adjust_scroll)
+
     def eventFilter(self, obj, event):
         from PyQt6.QtCore import QEvent
-        if obj is self.image_label and self._crop_mode and self._raw_data is not None:
+
+        # ── Scroll-wheel zoom (fires on viewport) ──────────────────────────
+        if obj is self.scroll_area.viewport():
+            if event.type() == QEvent.Type.Wheel and self._raw_data is not None:
+                self._handle_wheel_zoom(event)
+                return True
+
+        # ── Crop rubber-band + drag-to-pan (fire on image_label) ──────────
+        if obj is self.image_label and self._raw_data is not None:
             t = event.type()
-            if t == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
-                self._crop_start = event.pos()
-                if self._rubber_band is None:
-                    self._rubber_band = QRubberBand(QRubberBand.Shape.Rectangle, self.image_label)
-                self._rubber_band.setGeometry(QRect(self._crop_start, self._crop_start))
-                self._rubber_band.show()
-                return True
-            elif t == QEvent.Type.MouseMove and self._crop_start is not None:
-                if self._rubber_band is not None:
-                    self._rubber_band.setGeometry(QRect(self._crop_start, event.pos()).normalized())
-                return True
-            elif t == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
-                if self._crop_start is not None:
-                    rect = QRect(self._crop_start, event.pos()).normalized()
-                    x1, y1 = self._screen_to_image(rect.topLeft())
-                    x2, y2 = self._screen_to_image(rect.bottomRight())
-                    w = max(0, x2 - x1)
-                    h = max(0, y2 - y1)
-                    if w >= 10 and h >= 10:
-                        self.crop_selected.emit(x1, y1, w, h)
-                    self._crop_start = None
-                return True
+
+            if self._crop_mode:
+                # -- Crop mode: rubber-band selection ----------------------
+                if t == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+                    self._crop_start = event.pos()
+                    if self._rubber_band is None:
+                        self._rubber_band = QRubberBand(QRubberBand.Shape.Rectangle, self.image_label)
+                    self._rubber_band.setGeometry(QRect(self._crop_start, self._crop_start))
+                    self._rubber_band.show()
+                    return True
+                elif t == QEvent.Type.MouseMove and self._crop_start is not None:
+                    if self._rubber_band is not None:
+                        self._rubber_band.setGeometry(QRect(self._crop_start, event.pos()).normalized())
+                    return True
+                elif t == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+                    if self._crop_start is not None:
+                        rect = QRect(self._crop_start, event.pos()).normalized()
+                        x1, y1 = self._screen_to_image(rect.topLeft())
+                        x2, y2 = self._screen_to_image(rect.bottomRight())
+                        w = max(0, x2 - x1)
+                        h = max(0, y2 - y1)
+                        if w >= 10 and h >= 10:
+                            self.crop_selected.emit(x1, y1, w, h)
+                        self._crop_start = None
+                    return True
+            else:
+                # -- Pan mode: drag to scroll --------------------------------
+                if t == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+                    # Only pan when zoomed (scrollbars present)
+                    hbar = self.scroll_area.horizontalScrollBar()
+                    vbar = self.scroll_area.verticalScrollBar()
+                    if hbar.maximum() > 0 or vbar.maximum() > 0:
+                        self._pan_start_pos = event.globalPosition().toPoint()
+                        self._pan_start_scroll = (hbar.value(), vbar.value())
+                        self.image_label.setCursor(Qt.CursorShape.ClosedHandCursor)
+                        return True
+                elif t == QEvent.Type.MouseMove and self._pan_start_pos is not None:
+                    delta = event.globalPosition().toPoint() - self._pan_start_pos
+                    hbar = self.scroll_area.horizontalScrollBar()
+                    vbar = self.scroll_area.verticalScrollBar()
+                    hbar.setValue(self._pan_start_scroll[0] - delta.x())
+                    vbar.setValue(self._pan_start_scroll[1] - delta.y())
+                    return True
+                elif t == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton:
+                    if self._pan_start_pos is not None:
+                        self._pan_start_pos   = None
+                        self._pan_start_scroll = None
+                        self.image_label.setCursor(Qt.CursorShape.ArrowCursor)
+                        return True
+
         return super().eventFilter(obj, event)
 
     def _save_image(self):

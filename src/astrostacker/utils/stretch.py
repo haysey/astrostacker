@@ -18,6 +18,75 @@ factor for Red — making colour controls appear to have no effect.
 import numpy as np
 
 
+def _preview_neutralize_background(data: np.ndarray) -> np.ndarray:
+    """Scale colour channels so the sky background is colour-neutral (display only).
+
+    Samples the four image corners (≈12 % of each axis) to estimate the
+    per-channel sky level, then multiplies each channel by a small factor so
+    that all three sky backgrounds are equal.  The sky becomes a neutral grey,
+    removing the strong green cast caused by the 2× green pixels in a Bayer-
+    pattern sensor (RGGB) and any residual light-pollution colour bias.
+
+    This is applied only to the *display copy* — the underlying ndarray is
+    never modified.  When the image is already colour-balanced (after the
+    Colour Balance step), the per-channel factors are all ≈ 1.0 and the
+    function is effectively a no-op.
+
+    Falls back to a whole-image low-percentile sky estimate when the corners
+    are dominated by NaN alignment borders (common in stacked frames).
+
+    Args:
+        data: (H, W, 3) float32/64 colour image.
+              Mono images (ndim != 3) are returned unchanged.
+
+    Returns:
+        Colour-neutralized float32 copy, or the original array unchanged
+        if the sky level cannot be estimated reliably.
+    """
+    if data.ndim != 3 or data.shape[2] < 3:
+        return data
+
+    h, w = data.shape[:2]
+    # Corner sample: 12 % of each axis, minimum 16 px
+    ch = max(16, int(h * 0.12))
+    cw = max(16, int(w * 0.12))
+
+    sky = []
+    for c in range(3):
+        col = data[:, :, c].astype(np.float64)
+        corners = np.concatenate([
+            col[:ch,      :cw     ].ravel(),
+            col[:ch,      w - cw: ].ravel(),
+            col[h - ch:,  :cw     ].ravel(),
+            col[h - ch:,  w - cw: ].ravel(),
+        ])
+        valid = corners[np.isfinite(corners) & (corners > 0)]
+        if len(valid) < 20:
+            # Wide NaN alignment borders — fall back to full-image low percentile
+            all_v = col[np.isfinite(col) & (col > 0)].ravel()
+            if len(all_v) < 20:
+                return data          # cannot estimate sky — skip correction
+            sky.append(float(np.percentile(all_v, 10)))
+        else:
+            # Sigma-clipped median of the corner pixels
+            med = float(np.median(valid))
+            mad = float(np.median(np.abs(valid - med))) * 1.4826
+            clipped = valid[valid <= med + 2.5 * mad]
+            sky.append(float(np.median(clipped)) if len(clipped) >= 5 else med)
+
+    if any(s <= 0 for s in sky):
+        return data                  # degenerate sky estimate — skip
+
+    # Scale each channel so its sky equals the mean of all three sky levels.
+    # Using the mean (rather than the minimum) preserves overall luminance.
+    target = float(np.mean(sky))
+    result = data.astype(np.float32, copy=True)
+    for c, s in enumerate(sky):
+        result[:, :, c] = result[:, :, c] * (target / s)
+
+    return result
+
+
 def midtone_transfer(x: np.ndarray, midtone: float) -> np.ndarray:
     """Apply the midtone transfer function.
 
@@ -111,6 +180,12 @@ def auto_stretch(
     result = data.astype(np.float64)
 
     if result.ndim == 3:
+        # Remove the green cast from Bayer 2× green pixels and any LP colour
+        # bias before stretching.  This is display-only — the underlying data
+        # is never modified.  When the image is already colour-balanced the
+        # per-channel factors are all ≈ 1.0, so this is effectively a no-op.
+        result = _preview_neutralize_background(result).astype(np.float64)
+
         # Derive stretch parameters from luminance so that any colour-balance
         # multipliers applied to individual channels remain visible.
         lum = (

@@ -120,6 +120,21 @@ Processing
     automatic noise estimation. Preserves star profiles and nebula structure.
   - Auto-crop -- trims black/NaN borders left by frame alignment
 
+Post-Processing Window (opens maximised)
+  - Cumulative processing with up to 5 Undo levels
+  - Six-step workflow:
+      (1) Colour Balance  -- Auto (corner sky sampling) or manual RGB
+                             multipliers. Removes green casts permanently.
+      (2) Tone            -- Brightness, Contrast, Saturation sliders.
+      (3) Background      -- gradient removal and alignment border trim.
+      (4) Enhance         -- sharpen and denoise (Light/Medium/Strong).
+      (5) Stars           -- reduce dominant star brightness (0-100%).
+      (6) Save            -- FITS, TIFF, JPEG, or PNG.
+  - Stretch presets: Auto Gentle / Normal / Strong / Max / Linear
+  - Automatic green cast correction in the preview (Bayer RGGB sensors)
+  - Scroll wheel zoom and drag-to-pan
+  - Show Original toggle for instant before/after comparison
+
 Plate Solving
   - Integrated plate solver using Astrometry.net
   - WCS astrometry embedded for PixInsight SPCC and other tools

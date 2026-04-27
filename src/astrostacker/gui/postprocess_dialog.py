@@ -6,10 +6,10 @@ result.
 
 Step layout
 -----------
-  ❶  BACKGROUND  — gradient removal & auto-crop
-  ❷  ENHANCE     — denoise & sharpen
-  ❸  STARS       — star brightness reduction
-  ❹  COLOUR      — colour balance
+  ❶  COLOUR      — colour balance (fix casts before anything else)
+  ❷  BACKGROUND  — gradient removal & auto-crop
+  ❸  ENHANCE     — denoise & sharpen
+  ❹  STARS       — star brightness reduction
   ❺  APPLY & SAVE
 
 All steps are always visible; the numbers guide the recommended order
@@ -28,7 +28,7 @@ import traceback
 from pathlib import Path
 
 import numpy as np
-from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QThread, QTimer, Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -92,6 +92,11 @@ class PostProcessDialog(QDialog):
         self.setWindowFlag(Qt.WindowType.Window)
 
         self._raw_stack:          np.ndarray          = raw_stack
+        self._working_stack:      np.ndarray          = raw_stack   # accumulates applied steps
+        self._undo_stack:         list                = []          # up to 5 previous working stacks
+        self._pending_undo        = None                            # saved before worker starts
+        self._pending_had_crop:   bool                = False
+        self._pending_config:     PipelineConfig | None = None   # config used for the running job
         self._processed:          np.ndarray | None   = None
         self._showing_original:   bool                = False
         self._worker:             _PostProcessWorker | None = None
@@ -102,6 +107,9 @@ class PostProcessDialog(QDialog):
         self._setup_ui()
         self.preview.show_data(raw_stack, info="Original (unprocessed)")
         self.preview.crop_selected.connect(self._on_crop_selected)
+
+        # Open maximised to fill the screen (same as the main stacking window)
+        QTimer.singleShot(0, self.showMaximized)
 
     # ── UI ─────────────────────────────────────────────────────────────────
 
@@ -174,7 +182,7 @@ class PostProcessDialog(QDialog):
         # ── Right: controls panel ───────────────────────────────────────────
         right = QWidget()
         right.setObjectName("ppRight")
-        right.setFixedWidth(330)
+        right.setFixedWidth(355)
         right.setStyleSheet(
             "QWidget#ppRight {"
             "  background-color: rgba(12, 12, 22, 0.95);"
@@ -212,11 +220,12 @@ class PostProcessDialog(QDialog):
         sb_layout.setSpacing(0)
 
         steps = [
-            ("❶", "Background"),
-            ("❷", "Enhance"),
-            ("❸", "Stars"),
-            ("❹", "Colour"),
-            ("❺", "Save"),
+            ("❶", "Colour"),
+            ("❷", "Tone"),
+            ("❸", "Background"),
+            ("❹", "Enhance"),
+            ("❺", "Stars"),
+            ("❻", "Save"),
         ]
         for i, (num, name) in enumerate(steps):
             cell = QVBoxLayout()
@@ -261,8 +270,120 @@ class PostProcessDialog(QDialog):
         ctrl_layout.setContentsMargins(14, 10, 14, 10)
         ctrl_layout.setSpacing(4)
 
-        # ── ❶  BACKGROUND ────────────────────────────────────────────────
-        self._add_step_header(ctrl_layout, "❶", "BACKGROUND")
+        # ── ❶  COLOUR BALANCE ────────────────────────────────────────────
+        self._add_step_header(ctrl_layout, "❶", "COLOUR BALANCE")
+
+        self.colour_check = QCheckBox("Enable colour balance")
+        self.colour_check.setToolTip(
+            "Correct colour cast from light pollution, airglow,\n"
+            "or Bayer sensor bias. No-op on mono images."
+        )
+        self.colour_check.toggled.connect(self._on_colour_balance_toggled)
+        ctrl_layout.addWidget(self.colour_check)
+
+        self.colour_auto_check = QCheckBox("Auto (recommended)")
+        self.colour_auto_check.setChecked(True)
+        self.colour_auto_check.setEnabled(False)
+        self.colour_auto_check.setToolTip(
+            "Sample sky from image corners and neutralise any tint.\n"
+            "Works well for most light-polluted skies."
+        )
+        self.colour_auto_check.toggled.connect(self._on_colour_auto_toggled)
+        ctrl_layout.addWidget(self.colour_auto_check)
+
+        for colour, attr in [("R", "r"), ("G", "g"), ("B", "b")]:
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            row.setContentsMargins(0, 0, 0, 0)
+            lbl = QLabel(colour)
+            lbl.setFixedWidth(14)
+            lbl.setStyleSheet("color: rgba(255,255,255,0.7);")
+            row.addWidget(lbl)
+            slider = QSlider(Qt.Orientation.Horizontal)
+            slider.setRange(50, 200)
+            slider.setValue(100)
+            slider.setEnabled(False)
+            spinbox = QDoubleSpinBox()
+            spinbox.setRange(0.50, 2.00)
+            spinbox.setSingleStep(0.05)
+            spinbox.setDecimals(2)
+            spinbox.setSuffix("×")
+            spinbox.setValue(1.00)
+            spinbox.setFixedWidth(76)
+            spinbox.setEnabled(False)
+            slider.valueChanged.connect(
+                lambda v, s=spinbox: (s.blockSignals(True), s.setValue(v / 100.0), s.blockSignals(False))
+            )
+            spinbox.valueChanged.connect(
+                lambda v, sl=slider: (sl.blockSignals(True), sl.setValue(round(v * 100)), sl.blockSignals(False))
+            )
+            row.addWidget(slider)
+            row.addWidget(spinbox)
+            ctrl_layout.addLayout(row)
+            setattr(self, f"colour_{attr}_slider",  slider)
+            setattr(self, f"colour_{attr}_spinbox", spinbox)
+
+        ctrl_layout.addSpacing(8)
+
+        # ── ❷  TONE ───────────────────────────────────────────────────────
+        self._add_step_header(ctrl_layout, "❷", "TONE")
+
+        self.tone_check = QCheckBox("Enable tone adjustment")
+        self.tone_check.setToolTip(
+            "Adjust brightness, contrast and saturation of the image.\n\n"
+            "Brightness — multiplicative (EV-stop scale).\n"
+            "  +100% doubles brightness, −100% halves it.\n\n"
+            "Contrast — scales values around the sky floor.\n"
+            "  Positive widens the range; negative compresses it.\n\n"
+            "Saturation — scales colour deviation from luminance.\n"
+            "  +100% doubles colour intensity; −100% converts to grey.\n"
+            "  No effect on mono images."
+        )
+        self.tone_check.toggled.connect(self._on_tone_toggled)
+        ctrl_layout.addWidget(self.tone_check)
+
+        for _label, _attr in [
+            ("Brightness", "brightness"),
+            ("Contrast",   "contrast"),
+            ("Saturation", "saturation"),
+        ]:
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            row.setContentsMargins(0, 0, 0, 0)
+            lbl = QLabel(_label)
+            lbl.setFixedWidth(68)
+            lbl.setStyleSheet("color: rgba(255,255,255,0.70); font-size: 11px;")
+            row.addWidget(lbl)
+            slider = QSlider(Qt.Orientation.Horizontal)
+            slider.setRange(-100, 100)
+            slider.setValue(0)
+            slider.setEnabled(False)
+            spinbox = QSpinBox()
+            spinbox.setRange(-100, 100)
+            spinbox.setSuffix("%")
+            spinbox.setValue(0)
+            spinbox.setFixedWidth(72)
+            spinbox.setEnabled(False)
+            slider.valueChanged.connect(
+                lambda v, s=spinbox: (
+                    s.blockSignals(True), s.setValue(v), s.blockSignals(False)
+                )
+            )
+            spinbox.valueChanged.connect(
+                lambda v, sl=slider: (
+                    sl.blockSignals(True), sl.setValue(v), sl.blockSignals(False)
+                )
+            )
+            row.addWidget(slider)
+            row.addWidget(spinbox)
+            ctrl_layout.addLayout(row)
+            setattr(self, f"tone_{_attr}_slider",  slider)
+            setattr(self, f"tone_{_attr}_spinbox", spinbox)
+
+        ctrl_layout.addSpacing(8)
+
+        # ── ❸  BACKGROUND ────────────────────────────────────────────────
+        self._add_step_header(ctrl_layout, "❸", "BACKGROUND")
 
         self.gradient_check = QCheckBox("Remove gradient")
         self.gradient_check.setToolTip(
@@ -282,8 +403,8 @@ class PostProcessDialog(QDialog):
 
         ctrl_layout.addSpacing(8)
 
-        # ── ❷  ENHANCE ───────────────────────────────────────────────────
-        self._add_step_header(ctrl_layout, "❷", "ENHANCE")
+        # ── ❹  ENHANCE ───────────────────────────────────────────────────
+        self._add_step_header(ctrl_layout, "❹", "ENHANCE")
 
         denoise_row = QHBoxLayout()
         denoise_row.setSpacing(8)
@@ -345,8 +466,8 @@ class PostProcessDialog(QDialog):
 
         ctrl_layout.addSpacing(8)
 
-        # ── ❸  STARS ─────────────────────────────────────────────────────
-        self._add_step_header(ctrl_layout, "❸", "STARS")
+        # ── ❺  STARS ─────────────────────────────────────────────────────
+        self._add_step_header(ctrl_layout, "❺", "STARS")
 
         self.star_reduce_check = QCheckBox("Reduce stars")
         self.star_reduce_check.setToolTip(
@@ -384,61 +505,6 @@ class PostProcessDialog(QDialog):
         )
         star_slider_row.addWidget(self.star_spinbox)
         ctrl_layout.addLayout(star_slider_row)
-
-        ctrl_layout.addSpacing(8)
-
-        # ── ❹  COLOUR BALANCE ────────────────────────────────────────────
-        self._add_step_header(ctrl_layout, "❹", "COLOUR BALANCE")
-
-        self.colour_check = QCheckBox("Enable colour balance")
-        self.colour_check.setToolTip(
-            "Correct colour cast from light pollution, airglow,\n"
-            "or Bayer sensor bias. No-op on mono images."
-        )
-        self.colour_check.toggled.connect(self._on_colour_balance_toggled)
-        ctrl_layout.addWidget(self.colour_check)
-
-        self.colour_auto_check = QCheckBox("Auto (recommended)")
-        self.colour_auto_check.setChecked(True)
-        self.colour_auto_check.setEnabled(False)
-        self.colour_auto_check.setToolTip(
-            "Sample sky from image corners and neutralise any tint.\n"
-            "Works well for most light-polluted skies."
-        )
-        self.colour_auto_check.toggled.connect(self._on_colour_auto_toggled)
-        ctrl_layout.addWidget(self.colour_auto_check)
-
-        for colour, attr in [("R", "r"), ("G", "g"), ("B", "b")]:
-            row = QHBoxLayout()
-            row.setSpacing(6)
-            row.setContentsMargins(0, 0, 0, 0)
-            lbl = QLabel(colour)
-            lbl.setFixedWidth(14)
-            lbl.setStyleSheet("color: rgba(255,255,255,0.7);")
-            row.addWidget(lbl)
-            slider = QSlider(Qt.Orientation.Horizontal)
-            slider.setRange(50, 200)
-            slider.setValue(100)
-            slider.setEnabled(False)
-            spinbox = QDoubleSpinBox()
-            spinbox.setRange(0.50, 2.00)
-            spinbox.setSingleStep(0.05)
-            spinbox.setDecimals(2)
-            spinbox.setSuffix("×")
-            spinbox.setValue(1.00)
-            spinbox.setFixedWidth(76)
-            spinbox.setEnabled(False)
-            slider.valueChanged.connect(
-                lambda v, s=spinbox: (s.blockSignals(True), s.setValue(v / 100.0), s.blockSignals(False))
-            )
-            spinbox.valueChanged.connect(
-                lambda v, sl=slider: (sl.blockSignals(True), sl.setValue(round(v * 100)), sl.blockSignals(False))
-            )
-            row.addWidget(slider)
-            row.addWidget(spinbox)
-            ctrl_layout.addLayout(row)
-            setattr(self, f"colour_{attr}_slider",  slider)
-            setattr(self, f"colour_{attr}_spinbox", spinbox)
 
         # ── Crop tip ──────────────────────────────────────────────────────
         ctrl_layout.addSpacing(10)
@@ -489,18 +555,31 @@ class PostProcessDialog(QDialog):
         self.apply_btn.setObjectName("primaryButton")
         self.apply_btn.setFixedHeight(44)
         self.apply_btn.setToolTip(
-            "Run the selected steps and update the preview.\n"
-            "The original is always preserved — click Reset to go back.\n"
-            "Adjust settings and click Apply again to refine."
+            "Run the selected steps on the current working image.\n"
+            "Each Apply builds on the previous result (cumulative).\n"
+            "Use Undo to step back one stage, or Reset to start over."
         )
         self.apply_btn.clicked.connect(self._on_apply)
         al.addWidget(self.apply_btn)
 
+        undo_reset_row = QHBoxLayout()
+        undo_reset_row.setSpacing(6)
+        undo_reset_row.setContentsMargins(0, 0, 0, 0)
+
+        self.undo_btn = QPushButton("↩ Undo")
+        self.undo_btn.setObjectName("secondaryButton")
+        self.undo_btn.setToolTip("Step back one Apply (up to 5 levels).")
+        self.undo_btn.setEnabled(False)
+        self.undo_btn.clicked.connect(self._on_undo)
+        undo_reset_row.addWidget(self.undo_btn)
+
         self.reset_btn = QPushButton("Reset to Original")
         self.reset_btn.setObjectName("secondaryButton")
-        self.reset_btn.setToolTip("Restore the unprocessed original image.")
+        self.reset_btn.setToolTip("Restore the unprocessed original image and clear all history.")
         self.reset_btn.clicked.connect(self._on_reset)
-        al.addWidget(self.reset_btn)
+        undo_reset_row.addWidget(self.reset_btn)
+
+        al.addLayout(undo_reset_row)
 
         divider = QWidget()
         divider.setFixedHeight(1)
@@ -562,6 +641,11 @@ class PostProcessDialog(QDialog):
 
     # ── Toggle helpers ───────────────────────────────────────────────────────
 
+    def _on_tone_toggled(self, checked: bool):
+        for attr in ("brightness", "contrast", "saturation"):
+            getattr(self, f"tone_{attr}_slider").setEnabled(checked)
+            getattr(self, f"tone_{attr}_spinbox").setEnabled(checked)
+
     def _on_denoise_toggled(self, checked: bool):
         self.denoise_combo.setEnabled(checked)
 
@@ -591,11 +675,11 @@ class PostProcessDialog(QDialog):
         self._orig_btn.setText("Show Processed" if checked else "Show Original")
         if checked:
             self.preview.show_data(self._raw_stack, info="Original (unprocessed)")
-        elif self._processed is not None:
-            h, w = self._processed.shape[:2]
-            chan  = "RGB" if self._processed.ndim == 3 else "mono"
+        elif self._working_stack is not self._raw_stack:
+            h, w = self._working_stack.shape[:2]
+            chan  = "RGB" if self._working_stack.ndim == 3 else "mono"
             self.preview.show_data(
-                self._processed,
+                self._working_stack,
                 info=f"Post-processed  {w}×{h}  {chan}",
                 fixed_stretch_params=self._ref_stretch_params,
             )
@@ -628,22 +712,98 @@ class PostProcessDialog(QDialog):
         self.preview.set_crop_mode(False)
         self._crop_info_label.hide()
         self._clear_crop_btn.hide()
-        self.preview.show_data(self._raw_stack, info="Original (unprocessed)")
+        # Show the current working stack (may be processed, not necessarily raw)
+        if self._processed is not None:
+            h, w = self._working_stack.shape[:2]
+            chan  = "RGB" if self._working_stack.ndim == 3 else "mono"
+            self.preview.show_data(
+                self._working_stack,
+                info=f"Post-processed  {w}×{h}  {chan}",
+                fixed_stretch_params=self._ref_stretch_params,
+            )
+        else:
+            self.preview.show_data(self._raw_stack, info="Original (unprocessed)")
         self._compare_label.setText(
             "Choose options on the right, then click  ▶ Apply"
         )
 
+    def _on_undo(self):
+        """Step back one Apply — restores the previous working stack."""
+        try:
+            if self._thread is not None and self._thread.isRunning():
+                return
+            if not self._undo_stack:
+                return
+
+            prev = self._undo_stack.pop()
+
+            # Validate before touching any UI (guard against corrupt state)
+            if prev is None or not hasattr(prev, "shape"):
+                self._status_label.setText("Undo failed — history corrupted.")
+                self.undo_btn.setEnabled(len(self._undo_stack) > 0)
+                return
+
+            self._working_stack      = prev
+            # If more history remains, show as "post-processed"; otherwise raw
+            has_more = len(self._undo_stack) > 0
+            self._processed          = prev if has_more else None
+            self._ref_stretch_params = (
+                self._compute_ref_stretch(prev, target=self.preview.stretch_target)
+                if has_more else None
+            )
+
+            self._orig_btn.setEnabled(has_more)
+            self._orig_btn.setChecked(False)
+            self._orig_btn.setText("Show Original")
+            self.undo_btn.setEnabled(has_more)
+
+            h, w = prev.shape[:2]
+            chan  = "RGB" if prev.ndim == 3 else "mono"
+            label = (
+                f"Post-processed  {w}×{h}  {chan}"
+                if has_more else "Original (unprocessed)"
+            )
+            self.preview.show_data(
+                prev, info=label, fixed_stretch_params=self._ref_stretch_params
+            )
+            steps_left = len(self._undo_stack)
+            self._status_label.setText(
+                f"Undone.  {steps_left} step{'s' if steps_left != 1 else ''} in history."
+            )
+            self._compare_label.setText(
+                "Choose options on the right, then click  ▶ Apply"
+            )
+        except Exception as e:
+            import traceback
+            QMessageBox.critical(
+                self,
+                "Undo Error",
+                f"Undo failed:\n{e}\n\n{traceback.format_exc()}",
+            )
+            # Reset to a known-good state rather than leaving the UI broken
+            self._on_reset()
+
     # ── Stretch helpers ──────────────────────────────────────────────────────
 
     @staticmethod
-    def _compute_ref_stretch(data: np.ndarray) -> tuple:
+    def _compute_ref_stretch(data: np.ndarray, target: float = 0.20) -> tuple:
+        """Compute (shadow_clip, highlight, midtone) from *data* for locked display.
+
+        Args:
+            data:   Image array (H×W or H×W×C), float32.
+            target: target_background — where the sky median maps to on screen
+                    (0–1).  Lower = darker background, more aggressive stretch.
+                    Defaults to 0.20 (Normal preset).  Pass
+                    ``self.preview.stretch_target`` to respect the user's chosen
+                    Stretch combo setting.
+        """
         from astrostacker.utils.stretch import _compute_stretch_params
         arr = data.astype(np.float64)
         lum = (
             0.299 * arr[:, :, 0] + 0.587 * arr[:, :, 1] + 0.114 * arr[:, :, 2]
             if arr.ndim == 3 else arr
         )
-        return _compute_stretch_params(lum, target_background=0.25)
+        return _compute_stretch_params(lum, target_background=target)
 
     # ── Config builder ───────────────────────────────────────────────────────
 
@@ -663,6 +823,10 @@ class PostProcessDialog(QDialog):
             colour_balance_r=self.colour_r_slider.value() / 100.0,
             colour_balance_g=self.colour_g_slider.value() / 100.0,
             colour_balance_b=self.colour_b_slider.value() / 100.0,
+            tone_adjust=self.tone_check.isChecked(),
+            tone_brightness=float(self.tone_brightness_slider.value()),
+            tone_contrast=float(self.tone_contrast_slider.value()),
+            tone_saturation=float(self.tone_saturation_slider.value()),
         )
 
     # ── Apply / Reset ────────────────────────────────────────────────────────
@@ -676,6 +840,7 @@ class PostProcessDialog(QDialog):
             config.auto_crop, config.remove_gradient,
             config.denoise, config.deconvolve,
             config.star_reduce, config.colour_balance,
+            config.tone_adjust,
         ]) and self._crop_rect is None
         if nothing_selected:
             self._status_label.setText(
@@ -686,12 +851,22 @@ class PostProcessDialog(QDialog):
         self._set_busy(True)
         self._status_label.setText("Processing — please wait…")
 
-        raw_for_worker = self._raw_stack
+        # Use the working stack (accumulates previous applies) as the input
+        raw_for_worker = self._working_stack
+        self._pending_had_crop = self._crop_rect is not None
         if self._crop_rect is not None:
             cx, cy, cw, ch = self._crop_rect
-            raw_for_worker = self._raw_stack[cy:cy + ch, cx:cx + cw]
+            raw_for_worker = self._working_stack[cy:cy + ch, cx:cx + cw]
 
-        self._ref_stretch_params = self._compute_ref_stretch(raw_for_worker)
+        # Save a copy of the current working stack for undo
+        # (copy, not reference — guards against any in-place mutation downstream)
+        self._pending_undo = self._working_stack.copy()
+
+        # Save config so _on_worker_finished knows which steps ran.
+        # Stretch params are NOT pre-computed here any more — the finished
+        # handler chooses between input-stretch and result-stretch depending
+        # on whether the step shifts absolute sky levels.
+        self._pending_config = config
 
         self._worker = _PostProcessWorker(raw_for_worker, config)
         self._thread = QThread()
@@ -711,11 +886,17 @@ class PostProcessDialog(QDialog):
     def _on_reset(self):
         if self._thread is not None and self._thread.isRunning():
             return
+        self._working_stack      = self._raw_stack
+        self._undo_stack         = []
+        self._pending_undo       = None
+        self._pending_had_crop   = False
+        self._pending_config     = None
         self._processed          = None
         self._ref_stretch_params = None
         self._orig_btn.setEnabled(False)
         self._orig_btn.setChecked(False)
         self._orig_btn.setText("Show Original")
+        self.undo_btn.setEnabled(False)
         self._compare_label.setText(
             "Choose options on the right, then click  ▶ Apply"
         )
@@ -729,7 +910,59 @@ class PostProcessDialog(QDialog):
 
     @pyqtSlot(np.ndarray)
     def _on_worker_finished(self, result: np.ndarray):
-        self._processed = result
+        # Commit the undo snapshot (cap history at 5 steps)
+        if self._pending_undo is not None:
+            self._undo_stack.append(self._pending_undo)
+            if len(self._undo_stack) > 5:
+                self._undo_stack.pop(0)
+            self._pending_undo = None
+
+        # Clear the manual crop rect now that it is baked into the result
+        if self._pending_had_crop:
+            self._crop_rect = None
+            self._crop_btn.setChecked(False)
+            self.preview.set_crop_mode(False)
+            self._crop_info_label.hide()
+            self._clear_crop_btn.hide()
+            self._pending_had_crop = False
+
+        # Advance the working stack to this result
+        self._working_stack = result
+        self._processed      = result
+
+        # Choose whether to compute stretch from the INPUT or the RESULT.
+        #
+        # The auto-stretch maps the luminance median to a fixed target
+        # brightness.  Any step that changes overall luminance (brightness,
+        # contrast) is therefore invisible if we recompute from the result —
+        # the new median just gets re-mapped to the same target value.
+        #
+        # Using the INPUT (pre-apply) stretch instead keeps the shadow/
+        # highlight anchored so that a brighter result genuinely looks brighter.
+        #
+        # Exception: gradient removal and auto colour-balance shift the
+        # absolute sky floor dramatically (sky moves from ~1000 ADU to ~0).
+        # The old shadow_clip then sits above the new sky level, making the
+        # entire image go black.  For those steps we must recompute from the
+        # result.
+        cfg = self._pending_config
+        sky_level_shifts = cfg is not None and (
+            cfg.remove_gradient
+            or (cfg.colour_balance and cfg.colour_balance_auto)
+        )
+        if sky_level_shifts:
+            # Sky floor moved — recompute so display is not all-black.
+            ref_data = result
+        else:
+            # All other steps (tone, sharpen, denoise, star reduction, manual
+            # colour balance): use the pre-apply state so luminance / colour
+            # changes remain visible.
+            ref_data = self._undo_stack[-1] if self._undo_stack else result
+        self._ref_stretch_params = self._compute_ref_stretch(
+            ref_data, target=self.preview.stretch_target
+        )
+        self._pending_config = None
+
         h, w = result.shape[:2]
         chan  = "RGB" if result.ndim == 3 else "mono"
         self.preview.show_data(
@@ -737,7 +970,11 @@ class PostProcessDialog(QDialog):
             info=f"Post-processed  {w}×{h}  {chan}",
             fixed_stretch_params=self._ref_stretch_params,
         )
-        self._status_label.setText("✓  Done — compare with original using the button.")
+        steps_done = len(self._undo_stack)
+        self._status_label.setText(
+            f"✓  Done ({steps_done} step{'s' if steps_done != 1 else ''} applied)."
+            "  Use Undo to step back or Reset to start over."
+        )
         self._orig_btn.setEnabled(True)
         self._orig_btn.setChecked(False)
         self._orig_btn.setText("Show Original")
@@ -747,6 +984,9 @@ class PostProcessDialog(QDialog):
 
     @pyqtSlot(str)
     def _on_worker_error(self, message: str):
+        # Discard the pending undo snapshot — nothing was committed
+        self._pending_undo    = None
+        self._pending_had_crop = False
         self._status_label.setText("Processing failed — see error dialog.")
         QMessageBox.critical(self, "Post-Processing Error", message)
 
@@ -758,11 +998,16 @@ class PostProcessDialog(QDialog):
     def _set_busy(self, busy: bool):
         self.apply_btn.setEnabled(not busy)
         self.reset_btn.setEnabled(not busy)
+        if not busy:
+            self.undo_btn.setEnabled(len(self._undo_stack) > 0)
+        else:
+            self.undo_btn.setEnabled(False)
 
     # ── Save ─────────────────────────────────────────────────────────────────
 
     def _save(self, fmt: str):
-        data = self._processed if self._processed is not None else self._raw_stack
+        # Save the latest working stack (may be partially processed)
+        data = self._working_stack
 
         fmt = fmt.lower()
         if fmt == "fits":

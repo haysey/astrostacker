@@ -14,10 +14,10 @@ def main():
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(APP_VERSION)
 
-    # Show Beta Bronze splash screen for 7 seconds, then auto-close.
+    # Show Beta Bronze splash screen for 3 seconds, then auto-close.
     # _splash must be kept assigned — if discarded Python garbage-collects
     # the object immediately and the window vanishes in a split second.
-    _splash = SplashScreen.show_for(app, duration_ms=7000)
+    _splash = SplashScreen.show_for(app, duration_ms=3000)
 
     window = MainWindow()
     window.show()

@@ -94,6 +94,12 @@ class PipelineConfig:
     colour_balance_g: float = 1.0
     colour_balance_b: float = 1.0
 
+    # Tone adjustment: brightness / contrast / saturation (post-stack)
+    tone_adjust: bool = False
+    tone_brightness: float = 0.0   # −100 … +100  (EV-stop scale: 2^(v/100))
+    tone_contrast: float = 0.0     # −100 … +100  (scale around sky floor)
+    tone_saturation: float = 0.0   # −100 … +100  (chroma scale around lum)
+
 
 class Pipeline:
     """Orchestrates the full calibrate -> align -> stack pipeline."""
@@ -618,6 +624,22 @@ class Pipeline:
                     f"(R×{r:.2f}  G×{g:.2f}  B×{b:.2f})..."
                 )
                 result = apply_rgb_balance(result, r=r, g=g, b=b)
+            self._check_cancel()
+
+        # Stage 4h: Tone adjustment (brightness / contrast / saturation)
+        if self.config.tone_adjust:
+            from astrostacker.utils.tone import adjust_tone
+            b_val = self.config.tone_brightness
+            c_val = self.config.tone_contrast
+            s_val = self.config.tone_saturation
+            self._report(
+                f"Tone adjust — brightness {b_val:+.0f}%  "
+                f"contrast {c_val:+.0f}%  saturation {s_val:+.0f}%"
+            )
+            result = adjust_tone(result,
+                                  brightness=b_val,
+                                  contrast=c_val,
+                                  saturation=s_val)
             self._check_cancel()
 
         return result

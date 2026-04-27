@@ -50,11 +50,16 @@ The first full release of Haysey's Astrostacker. Everything in one place.
 - Export as FITS, TIFF, or PNG
 
 **Post-Processing:**
-- **Interactive Post-Processing Window** — open any stacked result for real-time fine-tuning with instant before/after comparison toggle
-- **Star brightness reduction** — morphological star detection and reduction using classical algorithms (no AI, no model files). Slider + manual spinbox for precise control (0–100%)
-- **Colour balance** — manual R/G/B channel multipliers (0.50×–2.00×) with sliders and direct numeric spinbox entry. Auto mode neutralises colour casts automatically. Luminance-linked stretch keeps adjustments visible in the preview.
-- **Interactive crop** — draw a selection rectangle directly on the preview image to crop the stacked result
-- **Multi-format export** — save the post-processed result as FITS, TIFF, JPEG, or PNG directly from the window
+- **Interactive Post-Processing Window** — opens maximised for real-time fine-tuning with instant before/after comparison toggle. Scroll wheel zoom and drag-to-pan in the preview.
+- **Cumulative processing with Undo** — each Apply builds on the previous result. Up to 5 Undo levels let you step back without losing earlier work.
+- **Six-step workflow** — ❶ Colour Balance → ❷ Tone → ❸ Background → ❹ Enhance → ❺ Stars → ❻ Save. Steps apply in any order you choose.
+- **Tone adjustment** — Brightness, Contrast, and Saturation sliders. Brightness and contrast use a 2-stop-per-100 exponential scale; contrast is anchored to the sky floor so the background stays fixed while detail expands. Saturation scales colour deviation from grey (−100 = greyscale, +100 = doubled vividness).
+- **Stretch strength selector** — choose Auto – Gentle / Normal / Strong / Max or Linear. Each preset maps the sky background to a different display brightness so you can judge faint structure or bright highlights at a glance.
+- **Automatic green cast correction** — the preview automatically neutralises the 2× green signal from Bayer RGGB sensors by sampling sky corners and scaling each channel. Display-only, never baked into saved files.
+- **Colour balance** — Auto mode (corner sky sampling) or manual R/G/B multipliers (0.50×–2.00×) with sliders and direct numeric spinbox entry.
+- **Star brightness reduction** — morphological star detection and reduction using classical algorithms (no AI, no model files). Slider + manual spinbox for precise control (0–100%).
+- **Interactive crop** — draw a selection rectangle directly on the preview image to crop the stacked result.
+- **Multi-format export** — save the post-processed result as FITS, TIFF, JPEG, or PNG directly from the window.
 
 **Visual:**
 - Dark theme UI, orange accents, card-style panels, animated progress bar
@@ -77,7 +82,7 @@ Haysey's Astrostacker handles the entire workflow:
 8. **Gradient removal** — subtract light pollution gradients
 9. **Sharpen** — PSF-informed sharpening (Light/Medium/Strong)
 10. **Denoise** — Non-Local Means noise reduction (Light/Medium/Strong)
-11. **Post-process** — star reduction, colour balance, and crop in the interactive Post-Processing window
+11. **Post-process** — six-step interactive window: colour balance, tone (brightness/contrast/saturation), background removal, sharpen/denoise, star reduction, crop, and save
 12. **Plate Solve** — identify exactly where in the sky your image points
 13. **Mosaic** — stitch multiple plate-solved panels into a wide-field image
 14. **Export** — save as FITS, TIFF, JPEG, or PNG
@@ -104,7 +109,7 @@ Haysey's Astrostacker handles the entire workflow:
 - **Local normalisation** — per-frame gradient removal before alignment, for multi-hour sessions where sky brightness changed between frames. Note: not recommended for targets that fill the entire field of view (large emission nebulae) — use post-stack gradient removal instead
 - **Non-Local Means denoising** — classical NLM noise reduction (Buades et al. 2005) with automatic noise estimation and Light/Medium/Strong presets. Preserves star profiles and nebula structure.
 - **Auto-crop** — trims the black/NaN borders left by frame alignment for a clean rectangular result
-- **Post-processing window** — open any stacked result for interactive fine-tuning: star reduction, colour balance, and a drag-to-select crop tool. Compare before and after with one click. Save directly as FITS, TIFF, JPEG, or PNG.
+- **Post-processing window** — open any stacked result for interactive fine-tuning. Six-step cumulative workflow (Colour Balance → Tone → Background → Enhance → Stars → Save) with up to 5 Undo levels. Stretch strength presets, automatic green cast correction, scroll-wheel zoom, drag-to-pan, before/after toggle. Save directly as FITS, TIFF, JPEG, or PNG.
 - **Star brightness reduction** — morphological approach using high-pass peak detection, Gaussian mask painting, and dual-scale background estimation. Reduces stellar halos while preserving nebulosity and sky gradients underneath. No AI or model files.
 
 ### Plate Solving
@@ -311,13 +316,18 @@ If you see a "permission denied" error on the desktop shortcut:
 
 #### 5. Post-Process Your Result (Optional)
 
-After stacking completes, click **File > Post-Process…** to open the Post-Processing window:
+After stacking completes, click **File > Post-Process…** to open the Post-Processing window (opens full-screen automatically):
 
-- **Star brightness reduction** — reduce dominant stars so faint nebulosity shows through. Drag the Strength slider (50–70% is a good starting point) and click Apply.
-- **Colour balance** — tick **Enable colour balance** and leave **Auto (recommended)** on for a one-click colour correction. Or uncheck Auto and use the R/G/B sliders to tune manually.
-- **Crop** — click **✂ Crop**, drag a rectangle on the preview image, then click Apply to crop the result.
+The window uses a six-step workflow. Steps can be applied in any order and are cumulative — each Apply builds on the previous result. Use the **↩ Undo** button to step back, or **Reset to Original** to start fresh.
 
-Use the **Show Original** toggle to compare before and after. When you're happy, save directly as FITS, TIFF, JPEG, or PNG from the Post-Processing window.
+- **❶ Colour balance** — tick **Enable colour balance** and leave **Auto (recommended)** on for a one-click colour correction. Removes green casts and channel imbalances permanently.
+- **❷ Tone** — tick **Tone adjustment** to access Brightness, Contrast, and Saturation sliders. Good for brightening faint detail or boosting colour after a colour balance pass.
+- **❸ Background** — tick **Remove gradient** to subtract light pollution, or **Auto-crop edges** to trim any remaining alignment borders.
+- **❹ Enhance** — tick **Sharpen** or **Denoise** with Light / Medium / Strong presets.
+- **❺ Stars** — tick **Reduce stars** and set Strength (50–70% is a good starting point) to pull dominant stars back so nebulosity shows through.
+- **❻ Save** — save as FITS, TIFF, JPEG, or PNG.
+
+Use the **Stretch** dropdown (top-left of the preview) to choose Auto – Gentle / Normal / Strong / Max or Linear. Use the **Show Original** toggle to compare before and after at any time.
 
 #### 6. Plate Solve (Optional)
 
@@ -341,11 +351,42 @@ Plate solving identifies exactly where your image points in the sky and which ob
 
 ## Post-Processing Window
 
-After stacking, open **File > Post-Process…** to launch the interactive Post-Processing window. It works on any stacked image — not just the result of the current session.
+After stacking, open **File > Post-Process…** to launch the interactive Post-Processing window. It works on any stacked image — not just the result of the current session. The window opens maximised to fill your screen.
 
-All changes are non-destructive: your original FITS file is never touched. Every Apply starts from the original data, so you can freely adjust and re-apply.
+Processing is **cumulative** — each Apply updates the working result, which becomes the starting point for the next Apply. Up to **5 Undo levels** are available. Your original FITS file on disk is never touched.
 
-### Star Brightness Reduction
+### Six-Step Workflow
+
+The controls panel on the right is organised into six steps:
+
+| Step | Name | What it does |
+|------|------|--------------|
+| ❶ | Colour Balance | Correct green casts and RGB channel imbalances (Auto or manual) |
+| ❷ | Tone | Brightness, Contrast, and Saturation sliders |
+| ❸ | Background | Remove light pollution gradients; trim alignment borders |
+| ❹ | Enhance | PSF-informed sharpening; Non-Local Means denoising |
+| ❺ | Stars | Reduce dominant star brightness so nebulosity shows through |
+| ❻ | Save | Save as FITS, TIFF, JPEG, or PNG |
+
+### Preview Controls
+
+- **Stretch dropdown** — choose Auto – Gentle / Normal / **Strong** / Max or Linear. Each preset maps the sky to a different display brightness.
+- **Scroll wheel** to zoom, **click and drag** to pan.
+- **Automatic green cast correction** — the preview neutralises the 2× green signal from Bayer RGGB sensors automatically (display-only).
+- **Show Original** toggle — compare the current processed result with the original at any time.
+
+### Colour Balance (❶)
+
+- **Auto (recommended):** samples the four sky background corners and neutralises any colour cast — just tick the checkbox.
+- **Manual:** uncheck Auto to reveal R, G, and B multiplier sliders (0.50×–2.00×). Each slider has a numeric spinbox for direct entry.
+
+### Tone Adjustment (❷)
+
+- **Brightness** (−100 … +100 %): multiplicative scaling. +100 doubles brightness; −100 halves it.
+- **Contrast** (−100 … +100 %): anchored to the sky floor. Positive values expand the dynamic range of bright nebulae relative to the background.
+- **Saturation** (−100 … +100 %): scales colour deviation from grey. −100 = greyscale, +100 = doubled vividness. Colour images only.
+
+### Star Brightness Reduction (❺)
 
 Stars can dominate a widefield image and mask faint nebulosity. The star reducer uses a classical morphological approach — no AI, no model files required:
 
@@ -358,16 +399,9 @@ Background estimation uses a dual-scale approach (25 px near / 100 px far) so ha
 
 **How to use:** tick **Reduce stars**, set Strength (0–100%; start at 50%), click **▶ Apply**. Use **Show Original** to compare.
 
-### Colour Balance
-
-Corrects colour casts from light pollution, airglow, or sensor bias.
-
-- **Auto (recommended):** samples the sky background corners and neutralises any tint automatically — just tick the checkbox.
-- **Manual:** uncheck Auto to reveal R, G, and B multiplier sliders (0.50×–2.00×). Each slider has a numeric spinbox for direct entry.
-
 ### Crop Tool
 
-Click **✂ Crop**, drag a rectangle on the preview, then Apply. The crop is applied to the original unprocessed stack and can be combined with any other option in the same Apply pass.
+Click **✂ Crop**, drag a rectangle on the preview, then Apply. The crop is applied to the current working result (which may already include previous steps).
 
 ### Saving
 

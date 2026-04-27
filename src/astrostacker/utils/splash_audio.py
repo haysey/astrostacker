@@ -1,6 +1,6 @@
 """Splash screen orchestral launch fanfare.
 
-Full orchestral arrangement over the 7-second splash screen:
+Full orchestral arrangement over the 3-second splash screen:
 
   Harp    -- opening arpeggio (Em sparkle, first ~0.8 s)
   Strings -- sustained ensemble pad, chord progression Em → G → Am → Em

@@ -50,82 +50,88 @@ def _sigma_clipped_sky(values: np.ndarray, max_iters: int = 3) -> float:
 
 
 def _fit_background_surface(data_2d: np.ndarray, grid_size: int = 6) -> np.ndarray:
-    """Estimate the 2-D sky background using a sigma-clipped grid.
+    """Estimate the 2-D sky background from the four image corners.
 
-    Grid size is set to 6×6 (cells of ~690×470 pixels for a typical
-    camera frame).  This is a deliberate compromise between two competing
-    demands:
+    Why corner-only sampling
+    ------------------------
+    Any approach that samples *interior* cells fails for nebula-rich images:
+    the sigma-clipped median of a cell dominated by Hα or OIII emission
+    returns the *nebula* level, not the sky.  When that inflated value is
+    subtracted, the nebula is erased along with the gradient.
 
-    • Amp-glow removal needs fine enough cells that the corner glow — often
-      confined to the outermost 100–300 pixels — represents a significant
-      fraction of each corner cell and is captured by the sigma-clipped
-      median.  A 4×4 grid (cells ~1000×700 px) diluted the corner glow to
-      only ~20 % of the cell, leaving a visible residual.  A 6×6 grid
-      raises that to ~30 %, reliably pulling the glow into the background
-      model.
+    The fix is to sample background from the four frame **corners** only —
+    regions that contain genuine sky for virtually every astrophotography
+    target (which is centred by design).  The four corner sky estimates are
+    then bilinearly interpolated across the full frame to produce a smooth
+    gradient surface.  Because no interior pixels contribute to the surface,
+    nebulosity cannot contaminate it regardless of how much of the frame it
+    fills.
 
-    • Nebulosity over-subtraction requires coarser cells so that extended
-      emission (Hα, OIII) is outweighed by genuine sky pixels and does not
-      get absorbed into the background estimate.  The 8×8 grid that preceded
-      this caused visible over-subtraction on star-dense Milky Way fields.
-      At 6×6 the cell area is still 1.78× larger than 8×8, keeping nebulosity
-      bias low while recovering the amp-glow sensitivity.
+    LP gradients and amp glow are both smooth large-scale effects that are
+    well-modelled by a bilinear surface fitted to four corner samples.
 
-    The sigma-clipped sky estimator and bicubic upsampling give better edge
-    fidelity than the old 25th-percentile + 2nd-order polynomial approach.
+    For pure star fields (no extended emission) the result is equivalent to
+    the old full-grid approach because corner cells are representative.
 
     Args:
-        data_2d: 2-D float image (single channel).
-        grid_size: Number of grid divisions along each axis.
+        data_2d:   2-D float image (single channel).
+        grid_size: Kept for API compatibility — not used in this approach.
 
     Returns:
-        Background model with the same shape as input, as float32.
+        Background surface, same shape as input, float32.
     """
-    try:
-        from scipy.ndimage import zoom, median_filter
-        _SCIPY = True
-    except ImportError:
-        _SCIPY = False
-
     h, w = data_2d.shape
-    cell_h = max(1, h // grid_size)
-    cell_w = max(1, w // grid_size)
-    grid_h = (h + cell_h - 1) // cell_h
-    grid_w = (w + cell_w - 1) // cell_w
 
-    # ── Sample the sigma-clipped sky in every grid cell ───────────────
-    bg_grid = np.zeros((grid_h, grid_w), dtype=np.float64)
-    global_sky = float(np.nanmedian(data_2d))
+    # Corner sample size: 15 % of each dimension, minimum 32 px
+    ch = max(32, int(h * 0.15))
+    cw = max(32, int(w * 0.15))
 
-    for gy in range(grid_h):
-        for gx in range(grid_w):
-            y0 = gy * cell_h
-            y1 = min(y0 + cell_h, h)
-            x0 = gx * cell_w
-            x1 = min(x0 + cell_w, w)
-            cell = data_2d[y0:y1, x0:x1].ravel()
-            sky = _sigma_clipped_sky(cell)
-            bg_grid[gy, gx] = sky if sky > 0 else global_sky
+    # Sample each corner independently
+    raw_estimates = [
+        _sigma_clipped_sky(data_2d[:ch,      :cw     ].ravel()),  # top-left
+        _sigma_clipped_sky(data_2d[:ch,      w - cw: ].ravel()),  # top-right
+        _sigma_clipped_sky(data_2d[h - ch:,  :cw     ].ravel()),  # bottom-left
+        _sigma_clipped_sky(data_2d[h - ch:,  w - cw: ].ravel()),  # bottom-right
+    ]
 
-    # ── Smooth the grid to fill noisy / star-contaminated cells ──────
-    if _SCIPY:
-        bg_grid = median_filter(bg_grid, size=3)
+    # ── NaN-corner guard ──────────────────────────────────────────────────
+    # Stacked images have NaN borders from frame alignment.  If those borders
+    # are wider than 15 %, the corner sample is entirely NaN, _sigma_clipped_sky
+    # returns NaN, the bilinear surface becomes all-NaN, data - NaN = NaN, and
+    # nan_to_num turns the display to solid black.
+    # Fix: replace any NaN/zero corner with the minimum of the valid corners.
+    # If ALL corners are NaN (very wide borders), fall back to a low percentile
+    # of the whole image so we at least remove the absolute sky pedestal.
+    valid_estimates = [e for e in raw_estimates if np.isfinite(e) and e > 0]
 
-    # ── Upsample back to full image resolution ────────────────────────
-    if _SCIPY:
-        zoom_y = h / grid_h
-        zoom_x = w / grid_w
-        surface = zoom(bg_grid, (zoom_y, zoom_x), order=3)  # bicubic
-        surface = surface[:h, :w]                            # trim rounding
+    if not valid_estimates:
+        # All four corners are NaN — image has very wide alignment borders.
+        # Estimate sky from a low percentile of the whole valid image.
+        all_valid = data_2d[np.isfinite(data_2d) & (data_2d > 0)].ravel()
+        if len(all_valid) >= 5:
+            # 10th percentile: well within the sky range even for nebula fields
+            # (sky typically occupies the lower 20-40 % of the value range).
+            fallback = float(np.percentile(all_valid, 10))
+        else:
+            return np.zeros((h, w), dtype=np.float32)
+        tl = tr = bl = br = fallback
     else:
-        # Fallback: bilinear with numpy if scipy is unavailable
-        from numpy import interp
-        ys = np.linspace(0, grid_h - 1, h)
-        xs = np.linspace(0, grid_w - 1, w)
-        # Two-pass bilinear via row then column interpolation
-        rows = np.array([interp(xs, np.arange(grid_w), bg_grid[int(round(y))])
-                         for y in ys])
-        surface = rows
+        # Replace only the NaN corners; keep valid ones as-is.
+        fallback = float(min(valid_estimates))
+        tl, tr, bl, br = [
+            e if (np.isfinite(e) and e > 0) else fallback
+            for e in raw_estimates
+        ]
+
+    # ── Bilinear interpolation ────────────────────────────────────────────
+    # surface[y, x] = tl*(1-y)*(1-x) + tr*(1-y)*x + bl*y*(1-x) + br*y*x
+    ys = np.linspace(0.0, 1.0, h, dtype=np.float64)   # (h,)
+    xs = np.linspace(0.0, 1.0, w, dtype=np.float64)   # (w,)
+
+    top    = tl + (tr - tl) * xs                      # sky level at top edge    (w,)
+    bottom = bl + (br - bl) * xs                      # sky level at bottom edge (w,)
+    # Each row blends between top and bottom at that column
+    surface = top[np.newaxis, :] + (bottom - top)[np.newaxis, :] * ys[:, np.newaxis]
 
     return surface.astype(np.float32)
 
@@ -220,9 +226,19 @@ def remove_gradient(data: np.ndarray, grid_size: int = 6) -> np.ndarray:
         # ── Step 1: per-channel background subtraction ────────────────
         # Each channel can have a different sky gradient, vignetting or
         # amp-glow pattern, so the background model is fitted per channel.
+        #
+        # IMPORTANT — gradient-only subtraction:
+        # We subtract only the *spatial variation* of the background
+        # (bg − bg_min), not the absolute background level.  Subtracting
+        # the full absolute background collapses nebula-rich fields to
+        # near-zero because the sigma-clipped sky estimator absorbs diffuse
+        # emission into its "sky" estimate when nebulosity dominates every
+        # grid cell.  The absolute sky level is dealt with by the luminance
+        # pedestal re-centring below.
         for c in range(data.shape[2]):
             bg = _fit_background_surface(data[:, :, c], grid_size=grid_size)
-            result[:, :, c] = (data[:, :, c] - bg).astype(np.float32)
+            gradient = bg - float(np.nanmin(bg))   # spatial variation only
+            result[:, :, c] = (data[:, :, c] - gradient).astype(np.float32)
 
         # ── Step 2: single luminance pedestal for all channels ────────
         # Derive the pedestal from the mean of all corrected channels
@@ -281,7 +297,9 @@ def remove_gradient(data: np.ndarray, grid_size: int = 6) -> np.ndarray:
 def _remove_gradient_channel(channel: np.ndarray, grid_size: int = 6) -> np.ndarray:
     """Remove gradient from a single 2-D channel."""
     bg = _fit_background_surface(channel, grid_size=grid_size)
-    corrected = (channel - bg).astype(np.float32)
+    # Gradient-only: subtract spatial variation, not absolute level
+    gradient = bg - float(np.nanmin(bg))
+    corrected = (channel - gradient).astype(np.float32)
 
     # Re-centre: shift so the sky background sits at a small positive
     # pedestal (1st percentile of the corrected image) rather than at zero.
