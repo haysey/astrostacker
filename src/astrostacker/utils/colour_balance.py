@@ -69,7 +69,7 @@ def auto_colour_balance(
         image[h - ch:, w - cw:, :].reshape(-1, 3),
     ], axis=0).astype(np.float64)
 
-    # Sigma-clipped sky estimate per channel
+    # ── Corner sigma-clipped sky estimate ────────────────────────────────
     ch_sky: list[float] = []
     for c in range(3):
         vals = corners[:, c]
@@ -85,6 +85,33 @@ def auto_colour_balance(
                 break
             vals = vals[keep]
         ch_sky.append(float(np.median(vals)))
+
+    # ── Full-frame fallback for targets that fill the FOV ─────────────────
+    # Emission nebulae (e.g. H-alpha rich fields) can fill the entire frame,
+    # leaving no clean sky in the corners.  The corner estimate then samples
+    # bright nebulosity and over-estimates the sky level, producing wildly
+    # wrong colour factors.
+    #
+    # Detection: if the corner sky estimate for ANY channel is more than 2×
+    # the full-image 5th-percentile sky, the corners are contaminated.
+    # Fallback: use the 5th percentile of the whole image per channel.  Even
+    # in a heavily nebula-filled frame the darkest 5 % of pixels are sky.
+    full_sky: list[float] = []
+    for c in range(3):
+        all_v = image[:, :, c].ravel().astype(np.float64)
+        all_v = all_v[np.isfinite(all_v) & (all_v > 0)]
+        full_sky.append(float(np.percentile(all_v, 5)) if len(all_v) >= 100 else ch_sky[c])
+
+    if any(
+        ch_sky[c] > 2.0 * full_sky[c]
+        for c in range(3)
+        if full_sky[c] > 0 and ch_sky[c] > 0
+    ):
+        log.debug(
+            "Auto colour balance: corners contaminated by nebulosity — "
+            "switching to full-image 5th-percentile sky estimate"
+        )
+        ch_sky = full_sky
 
     sky_lum = float(np.mean(ch_sky))
     if sky_lum < 1e-8:

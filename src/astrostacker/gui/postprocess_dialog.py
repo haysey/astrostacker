@@ -1037,9 +1037,42 @@ class PostProcessDialog(QDialog):
                 from astrostacker.io.loader import save_image
                 save_image(path, data)
             else:
-                from astrostacker.utils.stretch import auto_stretch
                 from astrostacker.utils.image_utils import numpy_to_qpixmap
-                pixmap = numpy_to_qpixmap(auto_stretch(data))
+
+                # ── WYSIWYG: build the display image exactly as the preview
+                # does so the saved file is pixel-for-pixel what the user sees.
+                #
+                # After an Apply the preview uses locked stretch params (same
+                # shadow/highlight/midtone for every channel) with NO additional
+                # background neutralisation.  Previously _save used auto_stretch()
+                # which re-runs _preview_neutralize_background — a different
+                # pipeline that produced a completely different-looking result.
+                if self._ref_stretch_params is not None:
+                    from astrostacker.utils.stretch import _apply_stretch_params
+                    shadow, highlight, midtone = self._ref_stretch_params
+                    arr = data.astype(np.float64)
+                    if arr.ndim == 3:
+                        channels = [
+                            _apply_stretch_params(
+                                arr[:, :, c], shadow, highlight, midtone
+                            )
+                            for c in range(arr.shape[2])
+                        ]
+                        display_data = np.stack(channels, axis=2)
+                    else:
+                        display_data = _apply_stretch_params(
+                            arr, shadow, highlight, midtone
+                        )
+                else:
+                    # No locked params (viewing the original, no Apply yet) —
+                    # fall back to standard auto-stretch so the save still looks
+                    # reasonable.
+                    from astrostacker.utils.stretch import auto_stretch
+                    display_data = auto_stretch(
+                        data, target_background=self.preview.stretch_target
+                    )
+
+                pixmap = numpy_to_qpixmap(display_data)
                 if not pixmap.save(path):
                     raise RuntimeError("QPixmap.save() failed — check path and format.")
             QMessageBox.information(self, "Saved", f"Image saved to:\n{path}")

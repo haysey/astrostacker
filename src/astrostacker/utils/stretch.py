@@ -52,8 +52,16 @@ def _preview_neutralize_background(data: np.ndarray) -> np.ndarray:
     cw = max(16, int(w * 0.12))
 
     sky = []
+    full_sky = []
     for c in range(3):
         col = data[:, :, c].astype(np.float64)
+
+        # Full-image 5th-percentile sky (robust fallback for full-frame targets)
+        all_v = col[np.isfinite(col) & (col > 0)].ravel()
+        if len(all_v) < 20:
+            return data              # cannot estimate sky — skip correction
+        full_sky.append(float(np.percentile(all_v, 5)))
+
         corners = np.concatenate([
             col[:ch,      :cw     ].ravel(),
             col[:ch,      w - cw: ].ravel(),
@@ -62,17 +70,24 @@ def _preview_neutralize_background(data: np.ndarray) -> np.ndarray:
         ])
         valid = corners[np.isfinite(corners) & (corners > 0)]
         if len(valid) < 20:
-            # Wide NaN alignment borders — fall back to full-image low percentile
-            all_v = col[np.isfinite(col) & (col > 0)].ravel()
-            if len(all_v) < 20:
-                return data          # cannot estimate sky — skip correction
-            sky.append(float(np.percentile(all_v, 10)))
+            # Wide NaN alignment borders — use full-image estimate
+            sky.append(full_sky[-1])
         else:
             # Sigma-clipped median of the corner pixels
             med = float(np.median(valid))
             mad = float(np.median(np.abs(valid - med))) * 1.4826
             clipped = valid[valid <= med + 2.5 * mad]
             sky.append(float(np.median(clipped)) if len(clipped) >= 5 else med)
+
+    # If corners are contaminated by nebulosity (corner estimate > 2× the
+    # full-image 5th-percentile for any channel), fall back to the full-image
+    # estimate so full-frame H-alpha targets are neutralised correctly.
+    if any(
+        sky[c] > 2.0 * full_sky[c]
+        for c in range(3)
+        if full_sky[c] > 0 and sky[c] > 0
+    ):
+        sky = full_sky
 
     if any(s <= 0 for s in sky):
         return data                  # degenerate sky estimate — skip
