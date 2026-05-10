@@ -325,22 +325,23 @@ class PostProcessDialog(QDialog):
 
         # ── SCNR ──────────────────────────────────────────────────────────
         ctrl_layout.addSpacing(6)
-        scnr_divider = QLabel("Green star / background reduction (SCNR)")
+        scnr_divider = QLabel("Per-pixel green removal")
         scnr_divider.setStyleSheet("color: #888; font-size: 11px;")
         ctrl_layout.addWidget(scnr_divider)
 
-        self.scnr_check = QCheckBox("Enable SCNR (remove excess green)")
+        self.scnr_check = QCheckBox("Remove excess green")
         self.scnr_check.setToolTip(
-            "Subtractive Chromatic Noise Reduction.\n\n"
-            "Removes excess green from stars and background caused by the\n"
-            "Bayer sensor's 2× green photosites or residual airglow.\n\n"
-            "For each pixel: if Green > (Red + Blue) / 2, the excess green\n"
-            "is subtracted by the chosen amount.  Pixels where green is\n"
-            "already ≤ neutral are untouched — genuine red or blue emission\n"
-            "is never affected.\n\n"
-            "Amount 100% = full removal (classic PixInsight SCNR default).\n"
+            "Removes the green tint from individual stars and the sky\n"
+            "background caused by colour cameras having twice as many\n"
+            "green pixels as red or blue (Bayer RGGB pattern).\n\n"
+            "How it works: for each pixel, if green is brighter than the\n"
+            "average of red and blue, the extra green is reduced by the\n"
+            "chosen amount.  Pixels that are already colour-neutral are\n"
+            "untouched — red nebulae and blue stars are never affected.\n\n"
+            "Amount 100% = full removal (recommended starting point).\n"
             "Amount 50%  = softer, half-strength removal.\n\n"
-            "Tip: run Colour Balance first, then SCNR for fine-tuning."
+            "Tip: run Colour Balance first, then Remove Excess Green\n"
+            "for per-pixel fine-tuning."
         )
         self.scnr_check.toggled.connect(self._on_scnr_toggled)
         ctrl_layout.addWidget(self.scnr_check)
@@ -357,7 +358,7 @@ class PostProcessDialog(QDialog):
         self.scnr_slider.setRange(0, 100)
         self.scnr_slider.setValue(100)
         self.scnr_slider.setEnabled(False)
-        self.scnr_slider.setToolTip("SCNR strength (0 = none, 100 = full)")
+        self.scnr_slider.setToolTip("Green removal strength (0 = none, 100 = full)")
         scnr_row.addWidget(self.scnr_slider)
 
         self.scnr_spinbox = QSpinBox()
