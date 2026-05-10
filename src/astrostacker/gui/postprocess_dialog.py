@@ -323,6 +323,64 @@ class PostProcessDialog(QDialog):
             setattr(self, f"colour_{attr}_slider",  slider)
             setattr(self, f"colour_{attr}_spinbox", spinbox)
 
+        # ── SCNR ──────────────────────────────────────────────────────────
+        ctrl_layout.addSpacing(6)
+        scnr_divider = QLabel("Green star / background reduction (SCNR)")
+        scnr_divider.setStyleSheet("color: #888; font-size: 11px;")
+        ctrl_layout.addWidget(scnr_divider)
+
+        self.scnr_check = QCheckBox("Enable SCNR (remove excess green)")
+        self.scnr_check.setToolTip(
+            "Subtractive Chromatic Noise Reduction.\n\n"
+            "Removes excess green from stars and background caused by the\n"
+            "Bayer sensor's 2× green photosites or residual airglow.\n\n"
+            "For each pixel: if Green > (Red + Blue) / 2, the excess green\n"
+            "is subtracted by the chosen amount.  Pixels where green is\n"
+            "already ≤ neutral are untouched — genuine red or blue emission\n"
+            "is never affected.\n\n"
+            "Amount 100% = full removal (classic PixInsight SCNR default).\n"
+            "Amount 50%  = softer, half-strength removal.\n\n"
+            "Tip: run Colour Balance first, then SCNR for fine-tuning."
+        )
+        self.scnr_check.toggled.connect(self._on_scnr_toggled)
+        ctrl_layout.addWidget(self.scnr_check)
+
+        scnr_row = QHBoxLayout()
+        scnr_row.setContentsMargins(0, 0, 0, 0)
+        scnr_lbl = QLabel("Amount")
+        scnr_lbl.setFixedWidth(70)
+        scnr_lbl.setEnabled(False)
+        self._scnr_amount_label = scnr_lbl
+        scnr_row.addWidget(scnr_lbl)
+
+        self.scnr_slider = QSlider(Qt.Orientation.Horizontal)
+        self.scnr_slider.setRange(0, 100)
+        self.scnr_slider.setValue(100)
+        self.scnr_slider.setEnabled(False)
+        self.scnr_slider.setToolTip("SCNR strength (0 = none, 100 = full)")
+        scnr_row.addWidget(self.scnr_slider)
+
+        self.scnr_spinbox = QSpinBox()
+        self.scnr_spinbox.setRange(0, 100)
+        self.scnr_spinbox.setValue(100)
+        self.scnr_spinbox.setSuffix("%")
+        self.scnr_spinbox.setFixedWidth(58)
+        self.scnr_spinbox.setEnabled(False)
+        scnr_row.addWidget(self.scnr_spinbox)
+        ctrl_layout.addLayout(scnr_row)
+
+        # Keep slider and spinbox in sync
+        self.scnr_slider.valueChanged.connect(
+            lambda v: (self.scnr_spinbox.blockSignals(True),
+                       self.scnr_spinbox.setValue(v),
+                       self.scnr_spinbox.blockSignals(False))
+        )
+        self.scnr_spinbox.valueChanged.connect(
+            lambda v: (self.scnr_slider.blockSignals(True),
+                       self.scnr_slider.setValue(v),
+                       self.scnr_slider.blockSignals(False))
+        )
+
         ctrl_layout.addSpacing(8)
 
         # ── ❷  TONE ───────────────────────────────────────────────────────
@@ -656,6 +714,11 @@ class PostProcessDialog(QDialog):
         self.star_slider.setEnabled(checked)
         self.star_spinbox.setEnabled(checked)
 
+    def _on_scnr_toggled(self, checked: bool):
+        self.scnr_slider.setEnabled(checked)
+        self.scnr_spinbox.setEnabled(checked)
+        self._scnr_amount_label.setEnabled(checked)
+
     def _on_colour_balance_toggled(self, checked: bool):
         self.colour_auto_check.setEnabled(checked)
         manual = checked and not self.colour_auto_check.isChecked()
@@ -827,6 +890,8 @@ class PostProcessDialog(QDialog):
             tone_brightness=float(self.tone_brightness_slider.value()),
             tone_contrast=float(self.tone_contrast_slider.value()),
             tone_saturation=float(self.tone_saturation_slider.value()),
+            scnr=self.scnr_check.isChecked(),
+            scnr_amount=self.scnr_slider.value() / 100.0,
         )
 
     # ── Apply / Reset ────────────────────────────────────────────────────────
@@ -840,7 +905,7 @@ class PostProcessDialog(QDialog):
             config.auto_crop, config.remove_gradient,
             config.denoise, config.deconvolve,
             config.star_reduce, config.colour_balance,
-            config.tone_adjust,
+            config.tone_adjust, config.scnr,
         ]) and self._crop_rect is None
         if nothing_selected:
             self._status_label.setText(

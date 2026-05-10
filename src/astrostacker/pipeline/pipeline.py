@@ -100,6 +100,10 @@ class PipelineConfig:
     tone_contrast: float = 0.0     # −100 … +100  (scale around sky floor)
     tone_saturation: float = 0.0   # −100 … +100  (chroma scale around lum)
 
+    # SCNR — green channel noise reduction (post-stack, colour images only)
+    scnr: bool = False
+    scnr_amount: float = 1.0       # 0.0 = no-op, 1.0 = full average-neutral SCNR
+
 
 class Pipeline:
     """Orchestrates the full calibrate -> align -> stack pipeline."""
@@ -626,7 +630,16 @@ class Pipeline:
                 result = apply_rgb_balance(result, r=r, g=g, b=b)
             self._check_cancel()
 
-        # Stage 4h: Tone adjustment (brightness / contrast / saturation)
+        # Stage 4h: SCNR — remove excess green from stars and background
+        if self.config.scnr and result.ndim == 3:
+            from astrostacker.utils.scnr import apply_scnr
+            pct = int(round(self.config.scnr_amount * 100))
+            self._report(f"Applying green SCNR ({pct}% strength)...")
+            result = apply_scnr(result, amount=self.config.scnr_amount)
+            self._report("SCNR complete")
+            self._check_cancel()
+
+        # Stage 4i: Tone adjustment (brightness / contrast / saturation)
         if self.config.tone_adjust:
             from astrostacker.utils.tone import adjust_tone
             b_val = self.config.tone_brightness
