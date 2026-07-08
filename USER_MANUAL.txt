@@ -777,14 +777,21 @@ Stretch controls
                     will appear nearly black in Linear mode — this is correct
                     for a raw linear FITS file.
 
-Automatic green cast correction
-  Raw Bayer-pattern images from colour cameras often carry a strong green
-  tint — the RGGB sensor pattern has two green photosites per four-pixel
-  block, producing roughly twice the green signal compared with red or blue.
-  The preview automatically neutralises this by sampling the sky background
-  in the image corners and scaling each channel to a common grey level.
-  This correction is display-only and is never baked into the saved file.
-  To apply it permanently to the data, use Colour Balance ❶ with Auto mode.
+True-colour preview (what you see is what you get)
+  Raw Bayer-pattern images from colour cameras carry a strong green tint —
+  the RGGB sensor pattern has two green photosites per four-pixel block,
+  producing roughly twice the green signal compared with red or blue.
+
+  The MAIN window's quick-look preview hides this automatically with a
+  display-only correction.  The Post-Processing window deliberately does
+  NOT: here the preview always shows the true colour state of the data, so
+  the image will look green when it first opens.  This is honest — it is
+  what your data really looks like, and it is what would be saved.
+
+  To fix it for real, use Colour Balance ❶ (already ticked, with Auto mode
+  on by default) and click Apply.  Because the preview is truthful, every
+  colour tool shows its genuine effect, and the saved JPEG/TIFF/PNG always
+  matches the screen exactly.
 
 Cumulative processing and Undo
   Each time you click Apply, the processed result becomes the new working
@@ -812,10 +819,14 @@ this to correct a colour cast from:
 
 Auto (recommended)
   Samples the sky background from the image corners and automatically
-  neutralises any colour cast. Tick "Enable colour balance" and leave
-  "Auto (recommended)" checked for a one-click correction. This is the
-  same background-neutralisation algorithm used in the preview display,
-  but applied permanently to the data.
+  neutralises any colour cast. Both "Enable colour balance" and "Auto
+  (recommended)" are already ticked when the window opens — just click
+  Apply for a one-click colour correction.
+
+  If the target fills the whole frame (a large emission nebula or dense
+  Milky Way field), the corners contain nebulosity rather than clean sky.
+  Auto detects this automatically and switches to sampling the darkest 5 %
+  of the whole image instead, so full-frame targets balance correctly too.
 
 Manual adjustment
   Uncheck "Auto (recommended)" to access the R, G, and B sliders.

@@ -166,6 +166,7 @@ def _apply_stretch_params(
 def auto_stretch(
     data: np.ndarray,
     target_background: float = 0.25,
+    neutralize_background: bool = True,
 ) -> np.ndarray:
     """Auto-stretch astronomical image data to uint8 for display.
 
@@ -185,6 +186,12 @@ def auto_stretch(
     Args:
         data: float32 image data, shape (H, W) or (H, W, C).
         target_background: Where the median background should map to (0-1).
+        neutralize_background: Apply the display-only sky colour
+            neutralisation before stretching.  True (default) for quick-look
+            previews (main window); False for editing contexts like the
+            Post-Processing window, where the display must show the TRUE
+            colour state of the data so that colour corrections and saved
+            files match what is on screen.
 
     Returns:
         uint8 ndarray suitable for display.
@@ -199,7 +206,8 @@ def auto_stretch(
         # bias before stretching.  This is display-only — the underlying data
         # is never modified.  When the image is already colour-balanced the
         # per-channel factors are all ≈ 1.0, so this is effectively a no-op.
-        result = _preview_neutralize_background(result).astype(np.float64)
+        if neutralize_background:
+            result = _preview_neutralize_background(result).astype(np.float64)
 
         # Derive stretch parameters from luminance so that any colour-balance
         # multipliers applied to individual channels remain visible.

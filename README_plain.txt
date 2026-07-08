@@ -131,7 +131,9 @@ Post-Processing Window (opens maximised)
       (5) Stars           -- reduce dominant star brightness (0-100%).
       (6) Save            -- FITS, TIFF, JPEG, or PNG.
   - Stretch presets: Auto Gentle / Normal / Strong / Max / Linear
-  - Automatic green cast correction in the preview (Bayer RGGB sensors)
+  - True-colour WYSIWYG preview -- shows the real colour state of the
+    data; saved files match the screen exactly.  Colour Balance (Auto)
+    is pre-ticked so one Apply fixes the Bayer green cast for real.
   - Scroll wheel zoom and drag-to-pan
   - Show Original toggle for instant before/after comparison
 

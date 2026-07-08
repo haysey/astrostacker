@@ -41,6 +41,12 @@ class PreviewPanel(QWidget):
         # post-processing dialog lock the display scale to the original image
         # so effects like star reduction are visible rather than compensated.
         self._fixed_stretch_params: tuple | None = None
+        # Display-only sky colour neutralisation (hides the Bayer 2× green
+        # cast).  True for quick-look previews (main window).  The
+        # post-processing dialog sets this False so the display always shows
+        # the TRUE colour state — otherwise colour tools appear to do the
+        # opposite of what they actually did.
+        self.neutralize_display: bool = True
         # Wheel zoom: fractional scale factor (None = use combo box)
         self._wheel_zoom = None
         # Drag-to-pan state
@@ -190,7 +196,9 @@ class PreviewPanel(QWidget):
             stretch_mode = self.stretch_combo.currentText()
             if stretch_mode.startswith("Auto"):
                 display_data = auto_stretch(
-                    self._raw_data, target_background=self.stretch_target
+                    self._raw_data,
+                    target_background=self.stretch_target,
+                    neutralize_background=self.neutralize_display,
                 )
             else:
                 display_data = linear_stretch(self._raw_data)

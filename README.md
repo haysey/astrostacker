@@ -55,7 +55,7 @@ The first full release of Haysey's Astrostacker. Everything in one place.
 - **Six-step workflow** — ❶ Colour Balance → ❷ Tone → ❸ Background → ❹ Enhance → ❺ Stars → ❻ Save. Steps apply in any order you choose.
 - **Tone adjustment** — Brightness, Contrast, and Saturation sliders. Brightness and contrast use a 2-stop-per-100 exponential scale; contrast is anchored to the sky floor so the background stays fixed while detail expands. Saturation scales colour deviation from grey (−100 = greyscale, +100 = doubled vividness).
 - **Stretch strength selector** — choose Auto – Gentle / Normal / Strong / Max or Linear. Each preset maps the sky background to a different display brightness so you can judge faint structure or bright highlights at a glance.
-- **Automatic green cast correction** — the preview automatically neutralises the 2× green signal from Bayer RGGB sensors by sampling sky corners and scaling each channel. Display-only, never baked into saved files.
+- **True-colour WYSIWYG preview** — the Post-Processing window always shows the real colour state of your data, and saved JPEG/TIFF/PNG files match the screen exactly. Colour Balance (Auto) is pre-ticked so one Apply fixes the Bayer green cast for real. The main window's quick-look preview still hides the cast automatically (display-only).
 - **Colour balance** — Auto mode (corner sky sampling) or manual R/G/B multipliers (0.50×–2.00×) with sliders and direct numeric spinbox entry.
 - **Star brightness reduction** — morphological star detection and reduction using classical algorithms (no AI, no model files). Slider + manual spinbox for precise control (0–100%).
 - **Interactive crop** — draw a selection rectangle directly on the preview image to crop the stacked result.
@@ -372,7 +372,7 @@ The controls panel on the right is organised into six steps:
 
 - **Stretch dropdown** — choose Auto – Gentle / Normal / **Strong** / Max or Linear. Each preset maps the sky to a different display brightness.
 - **Scroll wheel** to zoom, **click and drag** to pan.
-- **Automatic green cast correction** — the preview neutralises the 2× green signal from Bayer RGGB sensors automatically (display-only).
+- **True-colour preview** — this window always shows the real colour state of the data (the raw stack will look green until colour-balanced). What you see is exactly what saves.
 - **Show Original** toggle — compare the current processed result with the original at any time.
 
 ### Colour Balance (❶)

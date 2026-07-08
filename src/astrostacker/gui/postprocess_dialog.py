@@ -125,6 +125,13 @@ class PostProcessDialog(QDialog):
         left_layout.setSpacing(0)
 
         self.preview = PreviewPanel()
+        # This window is an editing context: show the TRUE colour state of
+        # the data.  The main window's quick-look preview hides the Bayer 2×
+        # green cast with a display-only neutralisation, but here that would
+        # make before/after comparisons lie — a step that genuinely reduces
+        # green would appear to ADD green once the hidden correction stops
+        # being applied.  What you see here is what saves.
+        self.preview.neutralize_display = False
         left_layout.addWidget(self.preview, stretch=1)
 
         # Toggle bar below preview
@@ -322,6 +329,13 @@ class PostProcessDialog(QDialog):
             ctrl_layout.addLayout(row)
             setattr(self, f"colour_{attr}_slider",  slider)
             setattr(self, f"colour_{attr}_spinbox", spinbox)
+
+        # Pre-ticked: the preview shows true (uncorrected) colours, so the
+        # raw stack will look green until balanced.  With Auto on by default
+        # a beginner's very first Apply fixes the colour for real.  Placed
+        # after all colour widgets exist because the toggle handler touches
+        # the Auto checkbox and the R/G/B sliders.
+        self.colour_check.setChecked(True)
 
         # ── SCNR ──────────────────────────────────────────────────────────
         ctrl_layout.addSpacing(6)
@@ -1006,15 +1020,17 @@ class PostProcessDialog(QDialog):
         # Using the INPUT (pre-apply) stretch instead keeps the shadow/
         # highlight anchored so that a brighter result genuinely looks brighter.
         #
-        # Exception: gradient removal and auto colour-balance shift the
-        # absolute sky floor dramatically (sky moves from ~1000 ADU to ~0).
-        # The old shadow_clip then sits above the new sky level, making the
-        # entire image go black.  For those steps we must recompute from the
-        # result.
+        # Exception: gradient removal, auto colour-balance, and SCNR shift
+        # the absolute sky level (gradient removal moves it from ~1000 ADU
+        # to ~0; SCNR and auto CB drop the dominant green sky, lowering the
+        # luminance median).  The old shadow_clip then sits above the new
+        # sky level, darkening or blacking out the display.  For those steps
+        # we must recompute from the result.
         cfg = self._pending_config
         sky_level_shifts = cfg is not None and (
             cfg.remove_gradient
             or (cfg.colour_balance and cfg.colour_balance_auto)
+            or cfg.scnr
         )
         if sky_level_shifts:
             # Sky floor moved — recompute so display is not all-black.
@@ -1131,11 +1147,13 @@ class PostProcessDialog(QDialog):
                         )
                 else:
                     # No locked params (viewing the original, no Apply yet) —
-                    # fall back to standard auto-stretch so the save still looks
-                    # reasonable.
+                    # fall back to auto-stretch WITHOUT display neutralisation,
+                    # matching this window's true-colour preview (WYSIWYG).
                     from astrostacker.utils.stretch import auto_stretch
                     display_data = auto_stretch(
-                        data, target_background=self.preview.stretch_target
+                        data,
+                        target_background=self.preview.stretch_target,
+                        neutralize_background=False,
                     )
 
                 pixmap = numpy_to_qpixmap(display_data)
